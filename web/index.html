@@ -7,6 +7,7 @@
     <!-- COOP/COEP Service Worker for SharedArrayBuffer on GitHub Pages -->
     <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="style.css">
+
 </head>
 <body>
     <div id="game-container">
@@ -293,6 +294,29 @@
 
         </div>
 
+        <!-- Engine loading screen (replaces the black canvas while the WASM module boots) -->
+        <div id="engine-loading-overlay" class="engine-loading-overlay hidden">
+            <div class="engine-loading-content">
+                <div class="engine-loading-title">HORIZON</div>
+                <div class="engine-loading-topic" id="engine-loading-topic">Загрузка мира...</div>
+                <div class="mc-progress-track engine-loading-track">
+                    <div id="engine-loading-bar" class="mc-progress-bar" style="width: 0%;"></div>
+                </div>
+                <div class="engine-loading-status" id="engine-loading-status">Подготовка...</div>
+            </div>
+
+            <!-- Not-found / error state -->
+            <div class="engine-error-content hidden" id="engine-error-content">
+                <h3 class="mc-screen-title" id="engine-error-title">Не удалось загрузить движок</h3>
+                <p class="engine-error-text" id="engine-error-text"></p>
+                <div class="menu-buttons-column" style="gap:10px;">
+                    <button class="mc-btn mc-btn-large" id="btn-engine-retry"><span class="mc-btn-text">Повторить загрузку</span></button>
+                    <button class="mc-btn mc-btn-large" id="btn-engine-resources"><span class="mc-btn-text">Открыть раздел «Ресурсы»</span></button>
+                    <button class="mc-btn mc-btn-large btn-back" data-target="screen-title"><span class="mc-btn-text">Вернуться в главное меню</span></button>
+                </div>
+            </div>
+        </div>
+
         <!-- In-game Touch Controls Overlay (D-Pad + Action Buttons for Mobile) -->
         <div id="touch-controls" class="touch-controls hidden">
             <!-- Left D-Pad -->
@@ -326,6 +350,7 @@
     <!-- Scripts -->
     <script src="vfs.js"></script>
     <script src="mojang_installer.js"></script>
+    <script src="engine_loader.js"></script>
     <script src="app.js"></script>
 </body>
 </html>

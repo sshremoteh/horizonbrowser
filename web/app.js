@@ -22,6 +22,15 @@
     const percentText = document.getElementById("download-percent-text");
     const btnCancelDownload = document.getElementById("btn-cancel-download");
 
+    // Engine loading screen
+    const engineLoadingOverlay = document.getElementById("engine-loading-overlay");
+    const engineLoadingBar = document.getElementById("engine-loading-bar");
+    const engineLoadingStatus = document.getElementById("engine-loading-status");
+    const engineLoadingTopic = document.getElementById("engine-loading-topic");
+    const engineErrorContent = document.getElementById("engine-error-content");
+    const engineErrorText = document.getElementById("engine-error-text");
+    const engineErrorTitle = document.getElementById("engine-error-title");
+
     // Screens
     const screens = {
         title: document.getElementById("screen-title"),
@@ -36,6 +45,9 @@
     // State
     let vfs = null;
     let mojangInstaller = null;
+    let engineLoader = null;
+    let engineReadyPromise = null;
+    let lastRequestedWorld = null;
     let selectedWorldId = null;
     let isGameRunning = false;
     let isTouchDevice = ("ontouchstart" in window || navigator.maxTouchPoints > 0);
@@ -104,6 +116,7 @@
         vfs = new HorizonVFS();
         await vfs.init();
         mojangInstaller = new MojangInstaller(vfs);
+        engineLoader = new HorizonEngineLoader(vfs);
 
         const hasCache = await vfs.hasCachedZip();
         if (hasCache) {
@@ -113,6 +126,7 @@
                     if (resStateEl) resStateEl.textContent = info.text || "Чтение кэша...";
                 });
                 updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
+                preloadEngine();
                 return;
             } catch (err) {
                 console.warn("[Horizon] Failed to mount cached zip, will need re-download:", err);
@@ -124,6 +138,26 @@
             resourceStatusBadge.style.cursor = "pointer";
             resourceStatusBadge.onclick = () => showScreen("resources");
         }
+    }
+
+    // Background engine preload: starts as soon as resources are mounted,
+    // so by the time the player enters a world the WASM module is ready.
+    function preloadEngine() {
+        if (!engineLoader) return Promise.resolve();
+        if (engineReadyPromise) return engineReadyPromise;
+        engineReadyPromise = engineLoader.load(() => {}).then(
+            (mod) => {
+                console.log("[Horizon] Engine preloaded in background.");
+                return mod;
+            },
+            (err) => {
+                // Offline-friendly: entering a world will retry with a visible loading screen
+                console.warn("[Horizon] Engine preload skipped:", err.message);
+                engineReadyPromise = null;
+                throw err;
+            }
+        );
+        return engineReadyPromise;
     }
 
     function updateResourceBadge(isReady, text) {
@@ -158,6 +192,7 @@
                 setTimeout(() => {
                     modalDownload.classList.add("hidden");
                     updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
+                    preloadEngine();
                 }, 800);
             }
         }).catch(err => {
@@ -189,6 +224,7 @@
                     setTimeout(() => {
                         modalDownload.classList.add("hidden");
                         updateResourceBadge(true, `Mojang 1.21.4 (${vfs.totalFiles.toLocaleString()} файлов)`);
+                        preloadEngine();
                     }, 800);
                 }
             });
@@ -242,6 +278,7 @@
                     modalStatus.textContent = info.text;
                 });
                 updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
+                preloadEngine();
                 setTimeout(() => modalDownload.classList.add("hidden"), 600);
             } catch (err) {
                 modalStatus.textContent = "Ошибка чтения архива: " + err.message;
@@ -366,24 +403,55 @@
     // In-Game & Lifecycle
     // =========================================================================
 
+    function showEngineLoading(topic) {
+        engineLoadingOverlay.classList.remove("hidden");
+        engineErrorContent.classList.add("hidden");
+        engineLoadingBar.parentElement.classList.remove("hidden");
+        engineLoadingBar.style.width = "0%";
+        engineLoadingTopic.textContent = topic || "Загрузка...";
+        engineLoadingStatus.textContent = "Подготовка...";
+    }
+
+    function showEngineError(err) {
+        engineErrorContent.classList.remove("hidden");
+        engineLoadingBar.parentElement.classList.add("hidden");
+        engineLoadingTopic.textContent = "Ошибка";
+        engineLoadingStatus.textContent = err.message || String(err);
+        engineErrorText.textContent =
+            err.message || "Причина неизвестна. Подробности в консоли браузера (F12).";
+        engineErrorTitle.textContent = "Не удалось загрузить движок";
+    }
+
+    function hideEngineLoading() {
+        engineLoadingOverlay.classList.add("hidden");
+    }
+
+    document.getElementById("btn-engine-retry").addEventListener("click", () => {
+        engineReadyPromise = null;
+        if (engineLoader) engineLoader.state = "idle";
+        if (lastRequestedWorld) launchWorld(lastRequestedWorld);
+        else showScreen("title");
+        hideEngineLoading();
+    });
+    document.getElementById("btn-engine-resources").addEventListener("click", () => {
+        hideEngineLoading();
+        showScreen("resources");
+    });
+
     async function launchWorld(world) {
-        if (!vfs.isReady) {
+        if (!vfs || !vfs.isReady) {
             alert("Ресурсы игры еще загружаются. Пожалуйста, дождитесь окончания загрузки.");
             promptDownloadResources();
             return;
         }
 
         console.log("[Horizon] Launching world:", world);
+        lastRequestedWorld = world;
 
-        menuOverlay.classList.add("hidden");
-        uiToolbar.classList.remove("hidden");
-        isGameRunning = true;
+        // Cover the canvas with a loading screen: never a bare black frame
+        showEngineLoading("Загрузка мира: " + world.name);
 
-        if (isTouchDevice) {
-            touchControls.classList.remove("hidden");
-        }
-
-        // Unlock audio
+        // Unlock audio early (still inside the user gesture)
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
@@ -392,14 +460,39 @@
             }
         } catch (_) {}
 
+        try {
+            await engineLoader.load((info) => {
+                if (info.text) engineLoadingStatus.textContent = info.text;
+                if (typeof info.percent === "number") {
+                    engineLoadingBar.style.width = info.percent + "%";
+                }
+            });
+        } catch (err) {
+            console.error("[Horizon] Engine load failed:", err);
+            showEngineError(err);
+            return;
+        }
+
+        // Engine compiled: swap to the game view
+        hideEngineLoading();
+        menuOverlay.classList.add("hidden");
+        uiToolbar.classList.remove("hidden");
+        isGameRunning = true;
+
+        if (isTouchDevice) {
+            touchControls.classList.remove("hidden");
+        }
+
         // Request pointer lock
         try {
             await canvas.requestPointerLock();
         } catch (_) {}
 
-        // Call WASM engine if loaded
+        // Hand the world to the engine (webgl/webgpu pipeline already owns the canvas)
         if (window.horizon_wasm_launch_world) {
             window.horizon_wasm_launch_world(world.id, world.mode);
+        } else {
+            console.warn("[Horizon] Engine loaded but no launch hook found; world not started.");
         }
     }
 

@@ -710,3 +710,94 @@ html, body {
     background: rgba(85, 255, 85, 0.45);
     border-color: #55ff55;
 }
+
+/* ==========================================================================
+   Engine Loading Screen (during WASM boot / on engine errors)
+   ========================================================================== */
+
+.engine-loading-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 150;
+    background: #3b2e20;
+    image-rendering: pixelated;
+}
+
+.engine-loading-overlay::before {
+    /* Faux dirt texture: subtle checker noise, like vanilla "building terrain" */
+    content: "";
+    position: absolute;
+    inset: 0;
+    background:
+        repeating-conic-gradient(#4a3826 0% 25%, #3b2e20 0% 50%) 0 0 / 32px 32px,
+        rgba(0, 0, 0, 0.25);
+    pointer-events: none;
+}
+
+.engine-loading-overlay.hidden {
+    display: none !important;
+}
+
+.engine-loading-content,
+.engine-error-content {
+    position: relative;
+    width: min(90vw, 560px);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 14px;
+}
+
+.engine-loading-title {
+    font-size: clamp(2rem, 6vw, 3.4rem);
+    font-weight: 900;
+    letter-spacing: 6px;
+    color: #e0e0e0;
+    text-shadow: 4px 4px 0px #3f3f3f, 6px 6px 0px #000000;
+}
+
+.engine-loading-topic {
+    font-size: 1.2rem;
+    color: #ffffa0;
+    text-shadow: var(--mc-text-shadow);
+    text-align: center;
+}
+
+.engine-loading-track {
+    width: 100%;
+}
+
+.engine-loading-status {
+    font-size: 0.9rem;
+    color: #c8c8c8;
+    text-shadow: var(--mc-text-shadow);
+    text-align: center;
+    min-height: 20px;
+}
+
+.engine-error-content {
+    text-align: center;
+}
+
+.engine-error-text {
+    font-size: 0.95rem;
+    color: #ff9090;
+    line-height: 1.55;
+    text-shadow: var(--mc-text-shadow);
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid rgba(255, 85, 85, 0.5);
+    padding: 12px 16px;
+    max-height: 34vh;
+    overflow-y: auto;
+}
+
+.engine-error-content.hidden,
+.engine-loading-content.hidden {
+    display: none !important;
+}
