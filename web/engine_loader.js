@@ -24,6 +24,49 @@ class HorizonEngineLoader {
         this.state = "idle"; // idle | loading | ready | not-found | unsupported | error
         this.error = null;
         this.engine = null;
+        this.deadMirrors = this.readDeadMirrors();
+    }
+
+    // Mirrors that were unreachable recently are skipped (~1 session TTL),
+    // so a dead CDN does not stall every load attempt for a minute.
+    static DEAD_KEY = "horizon_engine_dead_mirrors";
+    static DEAD_TTL_MS = 30 * 60 * 1000;
+
+    readDeadMirrors() {
+        try {
+            const raw = JSON.parse(sessionStorage.getItem(HorizonEngineLoader.DEAD_KEY) || "[]");
+            const now = Date.now();
+            return raw.filter(e => now - e.t < HorizonEngineLoader.DEAD_TTL_MS);
+        } catch (_) { return []; }
+    }
+
+    markMirrorDead(base) {
+        const url = new URL(base, location.href);
+        if (url.origin === location.origin) return; // local files never skipped
+        this.deadMirrors.push({ u: url.origin + url.pathname, t: Date.now() });
+        try { sessionStorage.setItem(HorizonEngineLoader.DEAD_KEY, JSON.stringify(this.deadMirrors)); } catch (_) {}
+    }
+
+    isMirrorDead(base) {
+        try {
+            const url = new URL(base, location.href);
+            const key = url.origin + url.pathname;
+            return this.deadMirrors.some(e => e.u === key);
+        } catch (_) { return false; }
+    }
+
+    escapeForRegex(base) {
+        return base.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/https?:\/\//g, "https?://");
+    }
+
+    async fetchWithTimeout(url, opts = {}, timeoutMs = 10000) {
+        const ctrl = new AbortController();
+        const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+        try {
+            return await fetch(url, { ...opts, signal: ctrl.signal });
+        } finally {
+            clearTimeout(timer);
+        }
     }
 
     /**
@@ -60,25 +103,48 @@ class HorizonEngineLoader {
         this.state = "loading";
         onProgress({ stage: "search", text: "Поиск WASM-модуля движка...", percent: 10 });
 
-        // 2. Locate the engine: in-VFS first, then same-origin, then mirrors
-        const sources = [];
-        if (this.vfs && this.vfs.isReady) sources.push({ kind: "vfs", base: "horizon/engine/" });
-        for (const mirror of ENGINE_MIRRORS) sources.push({ kind: "http", base: mirror });
-
-        let lastError = null;
-        for (const src of sources) {
+        // Locate the engine: in-VFS first (instant, local), then HTTP mirrors.
+        // Mirrors are probed in parallel with hard timeouts so one dead CDN
+        // cannot stall the whole load for a minute.
+        let vfsError = null;
+        if (this.vfs && this.vfs.isReady) {
             try {
-                const module = await this.loadFromSource(src, onProgress);
-                if (module) {
+                const bytes = await this.vfs.readFile("horizon/engine/horizon.wasm");
+                if (bytes && bytes.length > 0) {
+                    onProgress({ stage: "download", text: "Движок найден в horizon.zip, декодирование...", percent: 40 });
+                    const module = await this.compileAndInstantiate(bytes, onProgress);
                     this.engine = module;
                     this.state = "ready";
                     onProgress({ stage: "ready", text: "Движок готов!", percent: 100 });
                     return module;
                 }
             } catch (err) {
-                console.warn("[HorizonEngine] Source failed:", src.base, err);
-                lastError = err;
+                vfsError = err;
             }
+        }
+
+        const mirrors = ENGINE_MIRRORS.filter(m => !this.isMirrorDead(m));
+        let lastError = vfsError || new Error("движок отсутствует в horizon.zip");
+
+        if (mirrors.length > 0) {
+            try {
+                const src = await Promise.any(mirrors.map(m =>
+                    this.loadFromSource({ kind: "http", base: m }, onProgress)
+                ));
+                this.engine = src;
+                this.state = "ready";
+                onProgress({ stage: "ready", text: "Движок готов!", percent: 100 });
+                return src;
+            } catch (err) {
+                // AggregateError: every mirror failed. Remember the dead ones.
+                for (const m of mirrors) {
+                    // loadFromSource rejects with a tagged error when unreachable
+                    lastError = err.errors ? err.errors[err.errors.length - 1] : err;
+                }
+                mirrors.forEach(m => this.markMirrorDead(m));
+            }
+        } else {
+            lastError = new Error("зеркала движка временно недоступны, повторите позже");
         }
 
         this.state = "not-found";
@@ -100,7 +166,7 @@ class HorizonEngineLoader {
         let wasmUrl = src.base + "horizon.wasm";
         let glueUrl = src.base + "horizon.js";
         try {
-            const manifestResp = await fetch(src.base + "manifest.json", { cache: "no-cache" });
+            const manifestResp = await this.fetchWithTimeout(src.base + "manifest.json", { cache: "no-cache" }, 8000);
             if (manifestResp.ok) {
                 const manifest = await manifestResp.json();
                 if (manifest.wasm) wasmUrl = src.base + manifest.wasm;
@@ -109,26 +175,22 @@ class HorizonEngineLoader {
         } catch (_) {}
 
         // Glue script is optional (wasm-bindgen / custom ABI)
-        let glueOk = false;
         try {
-            const glueResp = await fetch(glueUrl, { cache: "no-cache" });
+            const glueResp = await this.fetchWithTimeout(glueUrl, { cache: "no-cache" }, 10000);
             if (glueResp.ok) {
                 const text = await glueResp.text();
                 if (text && text.length < 10_000_000 && /function|wasm/i.test(text)) {
                     // eslint-disable-next-line no-new-func
                     new Function(text + "\n//# sourceURL=" + glueUrl)();
-                    glueOk = true;
+                    onProgress({ stage: "download", text: "Загрузка WASM-модуля движка...", percent: 40 });
                 }
-                onProgress({ stage: "download", text: "Загрузка WASM-модуля движка...", percent: 40 });
             }
-        } catch (err) {
-            glueOk = false;
-        }
+        } catch (_) {}
 
-        const wasmResp = await fetch(wasmUrl, { cache: "no-cache" });
+        const wasmResp = await this.fetchWithTimeout(wasmUrl, { cache: "no-cache" }, 15000);
         if (!wasmResp.ok) throw new Error(`${wasmUrl}: HTTP ${wasmResp.status}`);
         const bytes = await this.readWithProgress(wasmResp, onProgress, 40, 80);
-        console.log(`[HorizonEngine] Engine found at ${wasmUrl} (${(bytes.byteLength / 1048576).toFixed(2)} МБ), glue: ${glueOk}`);
+        console.log(`[HorizonEngine] Engine found at ${wasmUrl} (${(bytes.byteLength / 1048576).toFixed(2)} МБ)`);
 
         return await this.compileAndInstantiate(bytes, onProgress);
     }
@@ -208,6 +270,15 @@ class HorizonEngineLoader {
 
         console.log("[HorizonEngine] Engine module ready, exports:", Object.keys(exports || {}).length);
         return mod;
+    }
+
+    /** Full reset used by the UI's "Повторить загрузку": re-probe dead mirrors too. */
+    resetToIdle() {
+        this.state = "idle";
+        this.engine = null;
+        this.error = null;
+        this.deadMirrors = [];
+        try { sessionStorage.removeItem(HorizonEngineLoader.DEAD_KEY); } catch (_) {}
     }
 }
 

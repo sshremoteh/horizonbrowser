@@ -473,7 +473,7 @@
 
     document.getElementById("btn-engine-retry").addEventListener("click", () => {
         engineReadyPromise = null;
-        if (engineLoader) engineLoader.state = "idle";
+        if (engineLoader) engineLoader.resetToIdle();
         if (lastRequestedWorld) launchWorld(lastRequestedWorld);
         else showScreen("title");
         hideEngineLoading();
