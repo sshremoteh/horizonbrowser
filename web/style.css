@@ -490,6 +490,23 @@ html, body {
     margin-top: 10px;
 }
 
+.engine-state-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 0.9rem;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.engine-state-label {
+    color: #ccc;
+}
+
+#res-engine-state {
+    font-weight: bold;
+    color: #ffaa00;
+}
+
 .screen-footer-actions {
     width: 100%;
     max-width: 480px;

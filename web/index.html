@@ -50,7 +50,8 @@
 
                 <div class="title-footer-left">
                     <span>Horizon 26.3 (Rust / WebGPU)</span><br>
-                    <span id="resource-status-badge" class="badge-status">Ресурсы: проверка...</span>
+                    <span id="resource-status-badge" class="badge-status">Ресурсы: проверка...</span><br>
+                    <span id="engine-status-badge" class="badge-status">Движок: проверка...</span>
                 </div>
                 <div class="title-footer-right">
                     <span>Minecraft: Java Edition 26.3 Parity</span><br>
@@ -219,6 +220,11 @@
                     </div>
 
                     <div class="resource-buttons-group">
+                        <div class="engine-state-row">
+                            <span class="engine-state-label">Движок (WASM):</span>
+                            <span id="res-engine-state">Проверка...</span>
+                        </div>
+
                         <button class="mc-btn mc-btn-full btn-accent" id="btn-redownload-resources">
                             <span class="mc-btn-text">🚀 Быстрая загрузка: horizon.zip (44.5 МБ)</span>
                         </button>

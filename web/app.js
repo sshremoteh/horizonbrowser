@@ -30,6 +30,8 @@
     const engineErrorContent = document.getElementById("engine-error-content");
     const engineErrorText = document.getElementById("engine-error-text");
     const engineErrorTitle = document.getElementById("engine-error-title");
+    const engineStatusBadge = document.getElementById("engine-status-badge");
+    const resEngineState = document.getElementById("res-engine-state");
 
     // Screens
     const screens = {
@@ -87,6 +89,19 @@
         if (name === "singleplayer") {
             refreshWorldList();
         }
+
+        if (name === "resources" && engineLoader) {
+            // Reflect the loader's real state when the user opens the screen
+            const map = {
+                ready: [ENGINE_BADGE_READY, "Готов"],
+                "not-found": [ENGINE_BADGE_MISSING, "Не найден — нужен horizon.wasm (см. далее)"],
+                unsupported: [ENGINE_BADGE_MISSING, "WebGPU/WebAssembly недоступны в этом браузере"],
+                loading: [ENGINE_BADGE_PENDING, "Загрузка..."],
+                idle: [ENGINE_BADGE_PENDING, "Ожидает монтирования ресурсов"]
+            };
+            const entry = map[engineLoader.state];
+            if (entry) updateEngineBadge(entry[0], entry[1]);
+        }
     }
 
     // Back buttons
@@ -142,18 +157,48 @@
 
     // Background engine preload: starts as soon as resources are mounted,
     // so by the time the player enters a world the WASM module is ready.
+    // Its state is surfaced live in the menu (title badge + resources screen).
+    function updateEngineBadge(kind, text) {
+        if (engineStatusBadge) {
+            engineStatusBadge.textContent = "Движок: " + text;
+            engineStatusBadge.className = "badge-status " + kind;
+        }
+        if (resEngineState) {
+            resEngineState.textContent = text;
+            resEngineState.style.color =
+                kind === "ready" ? "#55ff55" : (kind === "missing" ? "#ff5555" : "#ffaa00");
+        }
+    }
+
+    const ENGINE_BADGE_PENDING = "pending";
+    const ENGINE_BADGE_READY = "ready";
+    const ENGINE_BADGE_MISSING = "missing";
+
     function preloadEngine() {
         if (!engineLoader) return Promise.resolve();
         if (engineReadyPromise) return engineReadyPromise;
-        engineReadyPromise = engineLoader.load(() => {}).then(
+
+        updateEngineBadge(ENGINE_BADGE_PENDING, "Поиск WASM-модуля...");
+
+        const onProgress = (info) => {
+            if (info && info.text) updateEngineBadge(ENGINE_BADGE_PENDING, info.text);
+        };
+
+        engineReadyPromise = engineLoader.load(onProgress).then(
             (mod) => {
                 console.log("[Horizon] Engine preloaded in background.");
+                updateEngineBadge(ENGINE_BADGE_READY, "Готов");
                 return mod;
             },
             (err) => {
-                // Offline-friendly: entering a world will retry with a visible loading screen
+                // surfaced in the menu; entering a world will retry with details
                 console.warn("[Horizon] Engine preload skipped:", err.message);
+                updateEngineBadge(ENGINE_BADGE_MISSING, "Не найден (кликните, чтобы узнать почему)");
                 engineReadyPromise = null;
+                if (engineStatusBadge) {
+                    engineStatusBadge.style.cursor = "pointer";
+                    engineStatusBadge.onclick = () => showScreen("resources");
+                }
                 throw err;
             }
         );
