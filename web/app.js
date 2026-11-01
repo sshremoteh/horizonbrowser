@@ -1,6 +1,6 @@
 /**
  * Horizon Browser — Main Application Controller
- * Handles Navigation, World Management, Audio, Controls and VFS Integration
+ * Handles Navigation, World Management, Audio, Controls, VFS & Mojang Official Installer
  */
 
 (function () {
@@ -35,6 +35,7 @@
 
     // State
     let vfs = null;
+    let mojangInstaller = null;
     let selectedWorldId = null;
     let isGameRunning = false;
     let isTouchDevice = ("ontouchstart" in window || navigator.maxTouchPoints > 0);
@@ -102,6 +103,7 @@
     async function initVFS() {
         vfs = new HorizonVFS();
         await vfs.init();
+        mojangInstaller = new MojangInstaller(vfs);
 
         const hasCache = await vfs.hasCachedZip();
         if (hasCache) {
@@ -117,8 +119,8 @@
             }
         }
 
-        updateResourceBadge(false, "Требуется загрузка horizon.zip");
-        // Start initial download automatically
+        updateResourceBadge(false, "Требуется загрузка ресурсов");
+        // Start initial quick download automatically
         promptDownloadResources();
     }
 
@@ -133,10 +135,11 @@
         }
     }
 
+    // Quick download of horizon.zip
     function promptDownloadResources() {
         modalDownload.classList.remove("hidden");
         modalTitle.textContent = "Загрузка ресурсов игры (horizon.zip)";
-        modalStatus.textContent = "Поиск лучшего зеркала...";
+        modalStatus.textContent = "Поиск лучшего источника...";
         progressBar.style.width = "0%";
         speedText.textContent = "0 МБ/с";
         percentText.textContent = "0%";
@@ -157,9 +160,41 @@
             }
         }).catch(err => {
             console.error("[Horizon] Download failed:", err);
-            modalStatus.textContent = "Ошибка: " + err.message + ". Вы можете выбрать локальный файл horizon.zip.";
+            modalStatus.textContent = "Ошибка: " + err.message + ". Вы можете запустить официальную загрузку с серверов Mojang.";
             speedText.textContent = "Сбой";
         });
+    }
+
+    // Official Mojang installation pipeline (from HORIZON_MINECRAFT_DOWNLOADER_GUIDE.md)
+    async function startMojangOfficialInstall() {
+        modalDownload.classList.remove("hidden");
+        modalTitle.textContent = "Официальная установка с серверов Mojang";
+        modalStatus.textContent = "Подключение к piston-meta.mojang.com...";
+        progressBar.style.width = "0%";
+        speedText.textContent = "Официальный CDN";
+        percentText.textContent = "0%";
+
+        try {
+            await mojangInstaller.installOfficialPipeline((info) => {
+                if (info.speed) speedText.textContent = info.speed;
+                if (typeof info.percent === "number") {
+                    progressBar.style.width = info.percent + "%";
+                    percentText.textContent = info.percent + "%";
+                }
+                if (info.text) modalStatus.textContent = info.text;
+
+                if (info.stage === "ready") {
+                    setTimeout(() => {
+                        modalDownload.classList.add("hidden");
+                        updateResourceBadge(true, `Mojang 1.21.4 (${vfs.totalFiles.toLocaleString()} файлов)`);
+                    }, 800);
+                }
+            });
+        } catch (err) {
+            console.error("[Horizon] Mojang install failed:", err);
+            modalStatus.textContent = "Ошибка официальной загрузки: " + err.message;
+            speedText.textContent = "Сбой";
+        }
     }
 
     btnCancelDownload.addEventListener("click", () => {
@@ -169,6 +204,11 @@
     document.getElementById("btn-redownload-resources").addEventListener("click", async () => {
         await vfs.clearCache();
         promptDownloadResources();
+    });
+
+    document.getElementById("btn-install-mojang-official").addEventListener("click", async () => {
+        await vfs.clearCache();
+        startMojangOfficialInstall();
     });
 
     // File picker for local horizon.zip
@@ -214,7 +254,6 @@
 
         let worlds = await vfs.listWorlds();
         if (worlds.length === 0) {
-            // Seed a default starter world
             const defaultWorld = {
                 id: "world_" + Date.now(),
                 name: "Мой первый мир",
@@ -303,7 +342,7 @@
         showScreen("singleplayer");
     });
 
-    // Quick Play (Direct to game)
+    // Quick Play
     document.getElementById("btn-quick-play").addEventListener("click", () => {
         launchWorld({
             id: "quick_world",
@@ -325,7 +364,6 @@
 
         console.log("[Horizon] Launching world:", world);
 
-        // Hide menus
         menuOverlay.classList.add("hidden");
         uiToolbar.classList.remove("hidden");
         isGameRunning = true;

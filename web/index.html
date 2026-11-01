@@ -211,15 +211,19 @@
                     <div class="resource-card">
                         <div class="resource-icon">📦</div>
                         <div class="resource-details">
-                            <span class="resource-name">Horizon Core Assets 26.3 (horizon.zip)</span>
-                            <span class="resource-desc" id="res-desc">Размер: 44.5 МБ • 23 214 ассетов (блоки, предметы, звуки, модели)</span>
+                            <span class="resource-name">Horizon & Minecraft Java Assets</span>
+                            <span class="resource-desc" id="res-desc">Текстуры блоков, предметов, звуки, модели и таблицы движка</span>
                             <span class="resource-state" id="res-state">Проверка...</span>
                         </div>
                     </div>
 
                     <div class="resource-buttons-group">
-                        <button class="mc-btn mc-btn-full" id="btn-redownload-resources">
-                            <span class="mc-btn-text">🔄 Скачать / обновить ресурсы (horizon.zip)</span>
+                        <button class="mc-btn mc-btn-full btn-accent" id="btn-redownload-resources">
+                            <span class="mc-btn-text">🚀 Быстрая загрузка: horizon.zip (44.5 МБ)</span>
+                        </button>
+
+                        <button class="mc-btn mc-btn-full" id="btn-install-mojang-official">
+                            <span class="mc-btn-text">⛏️ Официальная загрузка: напрямую с серверов Mojang (client.jar)</span>
                         </button>
                         
                         <label class="mc-btn mc-btn-full file-picker-label">
@@ -320,6 +324,7 @@
 
     <!-- Scripts -->
     <script src="vfs.js"></script>
+    <script src="mojang_installer.js"></script>
     <script src="app.js"></script>
 </body>
 </html>
