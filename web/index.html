@@ -323,6 +323,25 @@
             </div>
         </div>
 
+        <!-- In-game Minecraft HUD (Crosshair & Hotbar) -->
+        <div id="in-game-hud" class="in-game-hud hidden">
+            <div class="crosshair">+</div>
+            <div class="hotbar-wrapper">
+                <div class="hotbar-label" id="hotbar-selected-name">Блок травы</div>
+                <div class="hotbar-container" id="hotbar-container">
+                    <div class="hotbar-slot active" data-slot="0"><div class="slot-icon icon-grass"></div><span class="slot-num">1</span></div>
+                    <div class="hotbar-slot" data-slot="1"><div class="slot-icon icon-dirt"></div><span class="slot-num">2</span></div>
+                    <div class="hotbar-slot" data-slot="2"><div class="slot-icon icon-stone"></div><span class="slot-num">3</span></div>
+                    <div class="hotbar-slot" data-slot="3"><div class="slot-icon icon-cobble"></div><span class="slot-num">4</span></div>
+                    <div class="hotbar-slot" data-slot="4"><div class="slot-icon icon-planks"></div><span class="slot-num">5</span></div>
+                    <div class="hotbar-slot" data-slot="5"><div class="slot-icon icon-log"></div><span class="slot-num">6</span></div>
+                    <div class="hotbar-slot" data-slot="6"><div class="slot-icon icon-leaves"></div><span class="slot-num">7</span></div>
+                    <div class="hotbar-slot" data-slot="7"><div class="slot-icon icon-sand"></div><span class="slot-num">8</span></div>
+                    <div class="hotbar-slot" data-slot="8"><div class="slot-icon icon-glass"></div><span class="slot-num">9</span></div>
+                </div>
+            </div>
+        </div>
+
         <!-- In-game Touch Controls Overlay (D-Pad + Action Buttons for Mobile) -->
         <div id="touch-controls" class="touch-controls hidden">
             <!-- Left D-Pad -->
@@ -356,6 +375,7 @@
     <!-- Scripts -->
     <script src="vfs.js"></script>
     <script src="mojang_installer.js"></script>
+    <script src="engine.js"></script>
     <script src="engine_loader.js"></script>
     <script src="app.js"></script>
 </body>

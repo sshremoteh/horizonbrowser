@@ -153,6 +153,7 @@
             resourceStatusBadge.style.cursor = "pointer";
             resourceStatusBadge.onclick = () => showScreen("resources");
         }
+        preloadEngine();
     }
 
     // Background engine preload: starts as soon as resources are mounted,
@@ -175,6 +176,14 @@
     const ENGINE_BADGE_MISSING = "missing";
 
     function preloadEngine() {
+        if (window.HorizonEngine) {
+            updateEngineBadge(ENGINE_BADGE_READY, "3D Voxel Engine (Готов)");
+            if (!window.horizonEngine) {
+                window.horizonEngine = new HorizonEngine();
+                window.horizonEngine.init(vfs).catch(console.warn);
+            }
+            return Promise.resolve();
+        }
         if (!engineLoader) return Promise.resolve();
         if (engineReadyPromise) return engineReadyPromise;
 
@@ -234,6 +243,9 @@
             if (info.text) modalStatus.textContent = info.text;
 
             if (info.status === "ready") {
+                if (window.horizonEngine && window.horizonEngine.gl) {
+                    window.horizonEngine.atlas.build(vfs, window.horizonEngine.gl);
+                }
                 setTimeout(() => {
                     modalDownload.classList.add("hidden");
                     updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
@@ -266,6 +278,9 @@
                 if (info.text) modalStatus.textContent = info.text;
 
                 if (info.stage === "ready") {
+                    if (window.horizonEngine && window.horizonEngine.gl) {
+                        window.horizonEngine.atlas.build(vfs, window.horizonEngine.gl);
+                    }
                     setTimeout(() => {
                         modalDownload.classList.add("hidden");
                         updateResourceBadge(true, `Mojang 1.21.4 (${vfs.totalFiles.toLocaleString()} файлов)`);
@@ -322,6 +337,9 @@
                 await vfs.mountZipBuffer(buffer, (info) => {
                     modalStatus.textContent = info.text;
                 });
+                if (window.horizonEngine && window.horizonEngine.gl) {
+                    window.horizonEngine.atlas.build(vfs, window.horizonEngine.gl);
+                }
                 updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
                 preloadEngine();
                 setTimeout(() => modalDownload.classList.add("hidden"), 600);
@@ -483,20 +501,32 @@
         showScreen("resources");
     });
 
-    async function launchWorld(world) {
-        if (!vfs || !vfs.isReady) {
-            alert("Ресурсы игры еще загружаются. Пожалуйста, дождитесь окончания загрузки.");
-            promptDownloadResources();
-            return;
-        }
+    const inGameHud = document.getElementById("in-game-hud");
+    const hotbarSelectedName = document.getElementById("hotbar-selected-name");
 
+    function updateHotbarSelection(slotIdx) {
+        if (!window.horizonEngine) return;
+        window.horizonEngine.selectedHotbarSlot = slotIdx;
+        window.horizonEngine.updateHotbarUI();
+
+        const blockType = window.HOTBAR_SLOTS[slotIdx];
+        if (hotbarSelectedName && window.BLOCK_NAMES[blockType]) {
+            hotbarSelectedName.textContent = window.BLOCK_NAMES[blockType];
+        }
+    }
+
+    document.querySelectorAll(".hotbar-slot").forEach((slotEl, idx) => {
+        slotEl.addEventListener("click", () => updateHotbarSelection(idx));
+    });
+
+    async function launchWorld(world) {
         console.log("[Horizon] Launching world:", world);
         lastRequestedWorld = world;
 
-        // Cover the canvas with a loading screen: never a bare black frame
-        showEngineLoading("Загрузка мира: " + world.name);
+        // Show loading screen while world is built
+        showEngineLoading("Генерация мира: " + world.name);
 
-        // Unlock audio early (still inside the user gesture)
+        // Unlock audio
         try {
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
@@ -506,21 +536,21 @@
         } catch (_) {}
 
         try {
-            await engineLoader.load((info) => {
-                if (info.text) engineLoadingStatus.textContent = info.text;
-                if (typeof info.percent === "number") {
-                    engineLoadingBar.style.width = info.percent + "%";
-                }
-            });
+            // Initialize 3D Voxel Engine
+            if (!window.horizonEngine) {
+                window.horizonEngine = new HorizonEngine();
+            }
+            await window.horizonEngine.init(vfs);
         } catch (err) {
-            console.error("[Horizon] Engine load failed:", err);
+            console.error("[Horizon] Engine init error:", err);
             showEngineError(err);
             return;
         }
 
-        // Engine compiled: swap to the game view
+        // World and textures ready: start the game!
         hideEngineLoading();
         menuOverlay.classList.add("hidden");
+        if (inGameHud) inGameHud.classList.remove("hidden");
         uiToolbar.classList.remove("hidden");
         isGameRunning = true;
 
@@ -528,22 +558,21 @@
             touchControls.classList.remove("hidden");
         }
 
-        // Request pointer lock
+        // Start 3D Rendering & Physics Loop
+        window.horizonEngine.start();
+        updateHotbarSelection(0);
+
+        // Request Pointer Lock for immersive first-person mouse look
         try {
             await canvas.requestPointerLock();
         } catch (_) {}
-
-        // Hand the world to the engine (webgl/webgpu pipeline already owns the canvas)
-        if (window.horizon_wasm_launch_world) {
-            window.horizon_wasm_launch_world(world.id, world.mode);
-        } else {
-            console.warn("[Horizon] Engine loaded but no launch hook found; world not started.");
-        }
     }
 
     function pauseGame() {
         if (!isGameRunning) return;
+        if (window.horizonEngine) window.horizonEngine.stop();
         document.exitPointerLock();
+        if (inGameHud) inGameHud.classList.add("hidden");
         menuOverlay.classList.remove("hidden");
         showScreen("pause");
     }
@@ -551,11 +580,15 @@
     function resumeGame() {
         if (!isGameRunning) return;
         menuOverlay.classList.add("hidden");
+        if (inGameHud) inGameHud.classList.remove("hidden");
+        if (window.horizonEngine) window.horizonEngine.start();
         canvas.requestPointerLock().catch(() => {});
     }
 
     function quitToTitle() {
         isGameRunning = false;
+        if (window.horizonEngine) window.horizonEngine.stop();
+        if (inGameHud) inGameHud.classList.add("hidden");
         uiToolbar.classList.add("hidden");
         touchControls.classList.add("hidden");
         document.exitPointerLock();
@@ -606,15 +639,39 @@
         const onStart = (e) => {
             e.preventDefault();
             el.classList.add("active");
-            if (key) window.dispatchEvent(new KeyboardEvent("keydown", { code: key, bubbles: true }));
+            if (key) {
+                window.dispatchEvent(new KeyboardEvent("keydown", { code: key, bubbles: true }));
+                if (window.horizonEngine && window.horizonEngine.player) {
+                    if (key === "KeyW") window.horizonEngine.player.keys.forward = true;
+                    if (key === "KeyS") window.horizonEngine.player.keys.backward = true;
+                    if (key === "KeyA") window.horizonEngine.player.keys.left = true;
+                    if (key === "KeyD") window.horizonEngine.player.keys.right = true;
+                    if (key === "Space") window.horizonEngine.player.keys.jump = true;
+                    if (key === "ShiftLeft") window.horizonEngine.player.keys.sneak = true;
+                }
+            }
             if (typeof mouse !== "undefined") {
                 canvas.dispatchEvent(new MouseEvent("mousedown", { button: parseInt(mouse, 10), bubbles: true }));
+                if (window.horizonEngine) {
+                    if (mouse === "0") window.horizonEngine.breakTargetedBlock();
+                    if (mouse === "2") window.horizonEngine.placeTargetedBlock();
+                }
             }
         };
         const onEnd = (e) => {
             e.preventDefault();
             el.classList.remove("active");
-            if (key) window.dispatchEvent(new KeyboardEvent("keyup", { code: key, bubbles: true }));
+            if (key) {
+                window.dispatchEvent(new KeyboardEvent("keyup", { code: key, bubbles: true }));
+                if (window.horizonEngine && window.horizonEngine.player) {
+                    if (key === "KeyW") window.horizonEngine.player.keys.forward = false;
+                    if (key === "KeyS") window.horizonEngine.player.keys.backward = false;
+                    if (key === "KeyA") window.horizonEngine.player.keys.left = false;
+                    if (key === "KeyD") window.horizonEngine.player.keys.right = false;
+                    if (key === "Space") window.horizonEngine.player.keys.jump = false;
+                    if (key === "ShiftLeft") window.horizonEngine.player.keys.sneak = false;
+                }
+            }
             if (typeof mouse !== "undefined") {
                 canvas.dispatchEvent(new MouseEvent("mouseup", { button: parseInt(mouse, 10), bubbles: true }));
             }
