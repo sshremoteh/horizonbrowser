@@ -1,15 +1,25 @@
+/* ==========================================================================
+   Horizon Browser — Authentic Minecraft & Modern Web Theme
+   ========================================================================== */
+
 :root {
-    --bg-base: #0f1015;
-    --bg-card: rgba(22, 24, 32, 0.92);
-    --border-color: rgba(255, 255, 255, 0.12);
-    --primary: #4a77e5;
-    --primary-hover: #5d88f5;
-    --primary-glow: rgba(74, 119, 229, 0.4);
-    --accent: #5d9c3f; /* Minecraft grass green */
-    --accent-glow: rgba(93, 156, 63, 0.4);
-    --text-main: #f0f2f5;
-    --text-muted: #959aa5;
-    --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    --mc-font: "Minecraft", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+    --mc-btn-bg: #4a4a4a;
+    --mc-btn-border-light: #7c7c7c;
+    --mc-btn-border-dark: #1b1b1b;
+    --mc-btn-hover: #5c6ea4;
+    --mc-btn-hover-light: #7e91ca;
+    --mc-btn-hover-dark: #273357;
+    --mc-text-shadow: 2px 2px 0px rgba(0, 0, 0, 0.85);
+    --mc-panel-bg: rgba(16, 16, 22, 0.94);
+}
+
+@font-face {
+    font-family: "Minecraft";
+    src: url("https://cdn.jsdelivr.net/gh/South-Paw/typeface-minecraft@master/files/minecraft.woff2") format("woff2");
+    font-weight: normal;
+    font-style: normal;
+    font-display: swap;
 }
 
 * {
@@ -19,28 +29,24 @@
     user-select: none;
     -webkit-user-select: none;
     -webkit-touch-callout: none;
+    font-family: var(--mc-font);
 }
 
 html, body {
     width: 100%;
     height: 100%;
     overflow: hidden;
-    background-color: var(--bg-base);
-    color: var(--text-main);
-    font-family: var(--font-family);
+    background-color: #0b0c10;
+    color: #ffffff;
 }
 
 #game-container {
     position: relative;
     width: 100vw;
     height: 100vh;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: #000;
+    background: #000;
 }
 
-/* Canvas */
 #horizon-canvas {
     width: 100%;
     height: 100%;
@@ -48,8 +54,11 @@ html, body {
     outline: none;
 }
 
-/* Splash / Loader Screen */
-.splash-overlay {
+/* ==========================================================================
+   Menu Overlay & Screens
+   ========================================================================== */
+
+.menu-overlay {
     position: absolute;
     top: 0;
     left: 0;
@@ -58,183 +67,510 @@ html, body {
     display: flex;
     align-items: center;
     justify-content: center;
-    background: radial-gradient(circle at center, #1b1e2a 0%, #090a0f 100%);
+    background: radial-gradient(circle at center, rgba(30, 34, 45, 0.85) 0%, rgba(10, 11, 15, 0.95) 100%);
     z-index: 100;
-    transition: opacity 0.4s ease, visibility 0.4s;
+    backdrop-filter: blur(4px);
+    transition: opacity 0.3s ease;
 }
 
-.splash-overlay.hidden {
+.menu-overlay.hidden {
     opacity: 0;
     visibility: hidden;
     pointer-events: none;
 }
 
-.splash-card {
-    background: var(--bg-card);
-    border: 1px solid var(--border-color);
-    border-radius: 16px;
-    padding: 32px 36px;
-    width: 90%;
-    max-width: 520px;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.6), 0 0 30px rgba(74, 119, 229, 0.15);
-    backdrop-filter: blur(16px);
+.screen-view {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    height: 100%;
+    padding: 24px;
+    animation: fadeIn 0.25s ease-out;
+}
+
+.screen-view.hidden {
+    display: none !important;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
+}
+
+/* Title Screen Logo */
+.logo-container {
+    position: relative;
+    margin-bottom: 36px;
     text-align: center;
 }
 
-/* Logo */
-.logo-title {
-    font-size: 2.8rem;
+.minecraft-title {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+}
+
+.title-horizon {
+    font-size: clamp(3rem, 8vw, 5.5rem);
     font-weight: 900;
-    letter-spacing: 3px;
-    background: linear-gradient(135deg, #ffffff 0%, #9db5f5 100%);
+    letter-spacing: 4px;
+    color: #e0e0e0;
+    text-shadow: 4px 4px 0px #3f3f3f, 6px 6px 0px #000000;
+    background: linear-gradient(180deg, #ffffff 30%, #a0a0a0 80%);
     -webkit-background-clip: text;
     -webkit-text-fill-color: transparent;
-    margin-bottom: 4px;
+    filter: drop-shadow(0 8px 16px rgba(0,0,0,0.7));
 }
 
-.logo-badge {
-    display: inline-block;
-    padding: 3px 10px;
-    font-size: 0.72rem;
-    font-weight: 700;
-    letter-spacing: 1.5px;
-    background: rgba(93, 156, 63, 0.2);
-    border: 1px solid rgba(93, 156, 63, 0.5);
-    color: #88d462;
-    border-radius: 20px;
-    margin-bottom: 8px;
+.splash-text {
+    position: absolute;
+    bottom: -14px;
+    right: -24px;
+    color: #ffff55;
+    font-size: clamp(1rem, 2.5vw, 1.45rem);
+    font-weight: bold;
+    text-shadow: var(--mc-text-shadow);
+    transform: rotate(-18deg);
+    animation: splashPulse 1.8s infinite alternate ease-in-out;
+    white-space: nowrap;
+    pointer-events: none;
 }
 
-.logo-sub {
-    font-size: 0.88rem;
-    color: var(--text-muted);
-    margin-bottom: 24px;
+@keyframes splashPulse {
+    0% { transform: rotate(-18deg) scale(1); }
+    100% { transform: rotate(-18deg) scale(1.14); }
 }
 
-/* Status Panel */
-.status-panel {
-    background: rgba(10, 11, 16, 0.6);
-    border: 1px solid rgba(255, 255, 255, 0.08);
-    border-radius: 12px;
-    padding: 18px;
-    margin-bottom: 24px;
-}
+/* ==========================================================================
+   Authentic Minecraft Buttons
+   ========================================================================== */
 
-.status-header {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.88rem;
-    font-weight: 600;
-    margin-bottom: 10px;
-}
-
-.status-title {
-    color: var(--text-main);
-}
-
-.status-speed {
-    color: #88d462;
-    font-variant-numeric: tabular-nums;
-}
-
-.progress-bar-container {
-    width: 100%;
-    height: 10px;
-    background: rgba(255, 255, 255, 0.08);
-    border-radius: 6px;
-    overflow: hidden;
+.mc-btn {
     position: relative;
-    margin-bottom: 10px;
+    background: var(--mc-btn-bg);
+    border-top: 3px solid var(--mc-btn-border-light);
+    border-left: 3px solid var(--mc-btn-border-light);
+    border-bottom: 3px solid var(--mc-btn-border-dark);
+    border-right: 3px solid var(--mc-btn-border-dark);
+    color: #e0e0e0;
+    padding: 10px 16px;
+    font-size: 1.05rem;
+    cursor: pointer;
+    text-align: center;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.4);
+    transition: filter 0.1s, transform 0.05s;
+    outline: none;
 }
 
-.progress-bar-fill {
-    height: 100%;
-    background: linear-gradient(90deg, #4a77e5, #5d9c3f);
-    border-radius: 6px;
-    transition: width 0.15s ease-out;
-    box-shadow: 0 0 12px var(--accent-glow);
+.mc-btn:hover:not(:disabled) {
+    background: var(--mc-btn-hover);
+    border-top-color: var(--mc-btn-hover-light);
+    border-left-color: var(--mc-btn-hover-light);
+    border-bottom-color: var(--mc-btn-hover-dark);
+    border-right-color: var(--mc-btn-hover-dark);
+    color: #ffffa0;
 }
 
-.status-footer {
-    display: flex;
-    justify-content: space-between;
-    font-size: 0.8rem;
-    color: var(--text-muted);
+.mc-btn:active:not(:disabled) {
+    border-top: 3px solid var(--mc-btn-border-dark);
+    border-left: 3px solid var(--mc-btn-border-dark);
+    border-bottom: 3px solid var(--mc-btn-border-light);
+    border-right: 3px solid var(--mc-btn-border-light);
+    transform: translateY(2px);
 }
 
-.status-percent {
-    font-weight: 700;
-    color: var(--text-main);
+.mc-btn:disabled {
+    opacity: 0.55;
+    cursor: not-allowed;
+    filter: grayscale(80%);
 }
 
-/* Action Area & Buttons */
-.action-area {
+.mc-btn-text {
+    text-shadow: var(--mc-text-shadow);
+    letter-spacing: 0.5px;
+}
+
+.menu-buttons-column {
     display: flex;
     flex-direction: column;
     gap: 12px;
-    margin-bottom: 20px;
+    width: 100%;
+    max-width: 420px;
 }
 
-.action-area.hidden {
-    display: none;
-}
-
-.btn {
-    border: none;
-    border-radius: 10px;
-    padding: 14px 24px;
-    font-size: 1rem;
-    font-weight: 700;
-    letter-spacing: 0.5px;
-    cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+.menu-buttons-row {
     display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
+    gap: 12px;
+    width: 100%;
 }
 
-.btn-primary {
-    background: linear-gradient(135deg, #4a77e5 0%, #355dbf 100%);
-    color: #fff;
-    box-shadow: 0 4px 16px var(--primary-glow);
+.mc-btn-large {
+    width: 100%;
+    padding: 14px;
+    font-size: 1.15rem;
 }
 
-.btn-primary:hover {
-    background: linear-gradient(135deg, #5d88f5 0%, #446dd6 100%);
-    transform: translateY(-2px);
-    box-shadow: 0 6px 20px var(--primary-glow);
+.mc-btn-half {
+    flex: 1;
+    padding: 12px 8px;
 }
 
-.btn-secondary {
-    background: rgba(255, 255, 255, 0.06);
-    color: var(--text-muted);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-    font-size: 0.88rem;
-    padding: 10px 18px;
+.mc-btn-full {
+    width: 100%;
+    padding: 10px;
 }
 
-.btn-secondary:hover {
-    background: rgba(255, 255, 255, 0.12);
-    color: var(--text-main);
+/* Screen Headers */
+.mc-screen-title {
+    font-size: 1.8rem;
+    color: #ffffff;
+    text-shadow: var(--mc-text-shadow);
+    margin-bottom: 24px;
 }
 
-.info-footer {
-    font-size: 0.76rem;
-    color: var(--text-muted);
-    line-height: 1.5;
+/* Footers */
+.title-footer-left {
+    position: absolute;
+    bottom: 14px;
+    left: 18px;
+    font-size: 0.85rem;
+    color: #a0a0a0;
+    text-shadow: var(--mc-text-shadow);
+    line-height: 1.6;
 }
 
-.info-footer a {
-    color: #799ef0;
+.title-footer-right {
+    position: absolute;
+    bottom: 14px;
+    right: 18px;
+    font-size: 0.85rem;
+    color: #a0a0a0;
+    text-shadow: var(--mc-text-shadow);
+    text-align: right;
+    line-height: 1.6;
+}
+
+.title-footer-right a {
+    color: #8cb1ff;
     text-decoration: none;
 }
 
-.info-footer a:hover {
-    text-decoration: underline;
+.badge-status {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: rgba(0, 0, 0, 0.4);
+    font-size: 0.8rem;
 }
 
-/* Floating Toolbar */
+.badge-status.ready {
+    color: #55ff55;
+    border: 1px solid rgba(85, 255, 85, 0.4);
+}
+
+.badge-status.missing {
+    color: #ffaa00;
+    border: 1px solid rgba(255, 170, 0, 0.4);
+}
+
+/* ==========================================================================
+   World List & Panels
+   ========================================================================== */
+
+.world-list-container {
+    width: 100%;
+    max-width: 580px;
+    max-height: 340px;
+    overflow-y: auto;
+    background: rgba(0, 0, 0, 0.5);
+    border: 2px solid #333;
+    padding: 8px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.world-card {
+    display: flex;
+    align-items: center;
+    background: rgba(40, 42, 50, 0.6);
+    border: 2px solid transparent;
+    padding: 10px 14px;
+    cursor: pointer;
+    gap: 14px;
+    transition: background 0.15s;
+}
+
+.world-card:hover {
+    background: rgba(60, 64, 80, 0.8);
+    border-color: #777;
+}
+
+.world-card.selected {
+    background: rgba(74, 119, 229, 0.35);
+    border-color: #ffffa0;
+}
+
+.world-icon {
+    font-size: 2.2rem;
+}
+
+.world-meta {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+}
+
+.world-meta-title {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #fff;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.world-meta-sub {
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+/* Form Panel */
+.form-panel {
+    width: 100%;
+    max-width: 520px;
+    background: var(--mc-panel-bg);
+    border: 2px solid #444;
+    padding: 24px;
+    margin-bottom: 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.form-group label {
+    font-size: 0.95rem;
+    color: #ccc;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.mc-input {
+    background: #000;
+    border: 2px solid #555;
+    color: #fff;
+    padding: 10px 14px;
+    font-size: 1rem;
+    outline: none;
+}
+
+.mc-input:focus {
+    border-color: #ffffa0;
+}
+
+.toggle-group {
+    display: flex;
+    gap: 10px;
+}
+
+.mc-btn-toggle.active {
+    background: #2e5927;
+    border-color: #55ff55;
+    color: #ffff55;
+}
+
+/* Server List */
+.server-card {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid #55ff55;
+    padding: 12px 16px;
+}
+
+.server-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #ffff55;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.server-address {
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+.server-ping {
+    color: #55ff55;
+    font-weight: bold;
+}
+
+/* Options Grid */
+.options-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    width: 100%;
+    max-width: 620px;
+    margin-bottom: 24px;
+}
+
+@media (max-width: 640px) {
+    .options-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+.option-item {
+    background: rgba(0, 0, 0, 0.4);
+    border: 2px solid #333;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    text-align: left;
+}
+
+.mc-range {
+    width: 100%;
+    accent-color: #55ff55;
+    cursor: pointer;
+}
+
+/* Resource Card */
+.resource-card {
+    display: flex;
+    gap: 16px;
+    align-items: center;
+    background: rgba(0, 0, 0, 0.4);
+    padding: 14px;
+    border: 2px solid #444;
+}
+
+.resource-icon {
+    font-size: 2.6rem;
+}
+
+.resource-details {
+    display: flex;
+    flex-direction: column;
+    gap: 4px;
+    text-align: left;
+}
+
+.resource-name {
+    font-size: 1.1rem;
+    font-weight: bold;
+    color: #ffffa0;
+}
+
+.resource-desc {
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+.resource-state {
+    font-size: 0.85rem;
+    font-weight: bold;
+    color: #55ff55;
+}
+
+.resource-buttons-group {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 10px;
+}
+
+.screen-footer-actions {
+    width: 100%;
+    max-width: 480px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+/* ==========================================================================
+   Modals & Progress Tracks
+   ========================================================================== */
+
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 200;
+}
+
+.mc-modal-box {
+    background: var(--mc-panel-bg);
+    border: 3px solid #555;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+    width: 90%;
+    max-width: 480px;
+    padding: 24px;
+    text-align: center;
+}
+
+.modal-title {
+    font-size: 1.4rem;
+    color: #ffffa0;
+    margin-bottom: 16px;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.modal-body {
+    margin-bottom: 20px;
+}
+
+.modal-status-text {
+    font-size: 0.95rem;
+    color: #e0e0e0;
+    margin-bottom: 12px;
+    min-height: 24px;
+    text-shadow: var(--mc-text-shadow);
+}
+
+.mc-progress-track {
+    width: 100%;
+    height: 18px;
+    background: #000;
+    border: 2px solid #555;
+    padding: 2px;
+    margin-bottom: 8px;
+}
+
+.mc-progress-bar {
+    height: 100%;
+    background: #55ff55;
+    box-shadow: 0 0 8px rgba(85, 255, 85, 0.6);
+    transition: width 0.15s ease-out;
+}
+
+.modal-meta-row {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.85rem;
+    color: #aaa;
+}
+
+/* ==========================================================================
+   In-Game HUD Toolbar & Touch Controls
+   ========================================================================== */
+
 .ui-toolbar {
     position: absolute;
     top: 14px;
@@ -249,20 +585,18 @@ html, body {
 }
 
 .tool-btn {
-    background: rgba(22, 24, 32, 0.85);
-    border: 1px solid var(--border-color);
+    background: rgba(0, 0, 0, 0.6);
+    border: 2px solid #555;
     color: #fff;
-    padding: 8px 12px;
-    border-radius: 8px;
-    font-size: 0.88rem;
-    font-weight: 700;
+    padding: 8px 14px;
+    font-size: 0.9rem;
     cursor: pointer;
-    backdrop-filter: blur(8px);
-    transition: background 0.15s;
+    text-shadow: var(--mc-text-shadow);
 }
 
 .tool-btn:hover {
-    background: rgba(45, 50, 65, 0.9);
+    background: rgba(40, 50, 70, 0.8);
+    border-color: #ffffa0;
 }
 
 /* Touch Controls */
@@ -280,7 +614,6 @@ html, body {
     display: none;
 }
 
-/* D-Pad */
 .dpad-container {
     position: absolute;
     bottom: 24px;
@@ -292,22 +625,21 @@ html, body {
 
 .dpad-btn {
     position: absolute;
-    background: rgba(255, 255, 255, 0.15);
-    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.18);
+    border: 2px solid rgba(255, 255, 255, 0.35);
     color: #fff;
-    border-radius: 12px;
+    border-radius: 10px;
     font-size: 1.2rem;
     display: flex;
     align-items: center;
     justify-content: center;
     cursor: pointer;
     touch-action: manipulation;
-    backdrop-filter: blur(4px);
 }
 
 .dpad-btn:active, .dpad-btn.active {
-    background: rgba(93, 156, 63, 0.5);
-    border-color: #88d462;
+    background: rgba(85, 255, 85, 0.45);
+    border-color: #55ff55;
 }
 
 .dpad-up { top: 0; left: 50px; width: 50px; height: 50px; }
@@ -316,7 +648,6 @@ html, body {
 .dpad-right { top: 50px; left: 100px; width: 50px; height: 50px; }
 .dpad-down { top: 100px; left: 50px; width: 50px; height: 50px; }
 
-/* Right action buttons */
 .action-buttons-container {
     position: absolute;
     bottom: 24px;
@@ -328,19 +659,19 @@ html, body {
 }
 
 .touch-btn {
-    background: rgba(255, 255, 255, 0.15);
-    border: 2px solid rgba(255, 255, 255, 0.25);
+    background: rgba(255, 255, 255, 0.18);
+    border: 2px solid rgba(255, 255, 255, 0.35);
     color: #fff;
-    padding: 12px 18px;
-    border-radius: 14px;
+    padding: 12px 20px;
+    border-radius: 12px;
     font-size: 0.9rem;
-    font-weight: 700;
-    backdrop-filter: blur(4px);
+    font-weight: bold;
     cursor: pointer;
     touch-action: manipulation;
+    text-shadow: var(--mc-text-shadow);
 }
 
 .touch-btn:active, .touch-btn.active {
-    background: rgba(74, 119, 229, 0.6);
-    border-color: #8cb1ff;
+    background: rgba(85, 255, 85, 0.45);
+    border-color: #55ff55;
 }

@@ -3,59 +3,292 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
-    <title>Horizon Browser - Minecraft Java 26.3 in Rust / WebGPU</title>
+    <title>Horizon Browser — Minecraft Java 26.3 (Rust / WebGPU)</title>
     <!-- COOP/COEP Service Worker for SharedArrayBuffer on GitHub Pages -->
     <script src="coi-serviceworker.js"></script>
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
     <div id="game-container">
-        <!-- Main WebGPU Canvas -->
+        <!-- Main WebGPU Canvas for rendering -->
         <canvas id="horizon-canvas" tabindex="1"></canvas>
 
-        <!-- Splash / Loader Screen -->
-        <div id="splash-screen" class="splash-overlay">
-            <div class="splash-card">
-                <div class="logo-area">
-                    <h1 class="logo-title">HORIZON</h1>
-                    <span class="logo-badge">BROWSER / WEBGPU</span>
-                    <p class="logo-sub">Minecraft: Java Edition 26.3 • Rust Re-implementation</p>
+        <!-- Dynamic Menu Layer (Minecraft Authentic UI) -->
+        <div id="menu-overlay" class="menu-overlay">
+            
+            <!-- 1. TITLE SCREEN (Главное меню) -->
+            <div id="screen-title" class="screen-view active">
+                <div class="logo-container">
+                    <div class="minecraft-title">
+                        <span class="title-word title-horizon">HORIZON</span>
+                    </div>
+                    <div id="splash-text" class="splash-text">Rebuilt in Rust!</div>
                 </div>
 
-                <div id="status-panel" class="status-panel">
-                    <div class="status-header">
-                        <span id="status-title" class="status-title">Проверка системы...</span>
-                        <span id="status-speed" class="status-speed"></span>
-                    </div>
-
-                    <div class="progress-bar-container">
-                        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
-                    </div>
-
-                    <div class="status-footer">
-                        <span id="status-detail" class="status-detail">Инициализация веб-движка...</span>
-                        <span id="status-percent" class="status-percent">0%</span>
-                    </div>
-                </div>
-
-                <!-- Action Button Area -->
-                <div id="action-area" class="action-area hidden">
-                    <button id="btn-start" class="btn btn-primary">
-                        <span class="btn-icon">▶</span> ЗАПУСТИТЬ ИГРУ
+                <div class="menu-buttons-column">
+                    <button class="mc-btn mc-btn-large" id="btn-goto-singleplayer">
+                        <span class="mc-btn-text">Одиночная игра</span>
                     </button>
-                    <button id="btn-redownload" class="btn btn-secondary">
-                        <span class="btn-icon">🔄</span> Перекачать ресурсы
+                    <button class="mc-btn mc-btn-large" id="btn-goto-multiplayer">
+                        <span class="mc-btn-text">Сетевая игра</span>
+                    </button>
+                    
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-goto-options">
+                            <span class="mc-btn-text">Настройки...</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half" id="btn-goto-resources">
+                            <span class="mc-btn-text">Ресурсы...</span>
+                        </button>
+                    </div>
+
+                    <button class="mc-btn mc-btn-large" id="btn-quick-play">
+                        <span class="mc-btn-text">⚡ Быстрый старт (Творческий мир)</span>
                     </button>
                 </div>
 
-                <div class="info-footer">
-                    <p>Поддерживает Chrome, Edge, Safari 18+ и Firefox с включенным WebGPU.</p>
-                    <p><a href="https://github.com/sshremoteh/horizonbrowser" target="_blank" rel="noopener">GitHub репозиторий</a> • <a href="https://playhorizon.dev" target="_blank" rel="noopener">playhorizon.dev</a></p>
+                <div class="title-footer-left">
+                    <span>Horizon 26.3 (Rust / WebGPU)</span><br>
+                    <span id="resource-status-badge" class="badge-status">Ресурсы: проверка...</span>
+                </div>
+                <div class="title-footer-right">
+                    <span>Minecraft: Java Edition 26.3 Parity</span><br>
+                    <a href="https://github.com/sshremoteh/horizonbrowser" target="_blank" rel="noopener">GitHub</a> • 
+                    <a href="https://playhorizon.dev" target="_blank" rel="noopener">playhorizon.dev</a>
                 </div>
             </div>
+
+            <!-- 2. SINGLEPLAYER SCREEN (Выбор мира) -->
+            <div id="screen-singleplayer" class="screen-view hidden">
+                <h2 class="mc-screen-title">Выбор мира</h2>
+                
+                <div class="world-list-container" id="world-list">
+                    <!-- World cards injected dynamically -->
+                </div>
+
+                <div class="screen-footer-actions">
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-play-world" disabled>
+                            <span class="mc-btn-text">Играть в выбранном мире</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half" id="btn-goto-create-world">
+                            <span class="mc-btn-text">Создать новый мир</span>
+                        </button>
+                    </div>
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-delete-world" disabled>
+                            <span class="mc-btn-text">Удалить</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half btn-back" data-target="screen-title">
+                            <span class="mc-btn-text">Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 3. CREATE WORLD SCREEN (Создание мира) -->
+            <div id="screen-create-world" class="screen-view hidden">
+                <h2 class="mc-screen-title">Создать новый мир</h2>
+
+                <div class="form-panel">
+                    <div class="form-group">
+                        <label for="world-name-input">Название мира</label>
+                        <input type="text" id="world-name-input" class="mc-input" value="Новый мир" maxlength="32">
+                    </div>
+
+                    <div class="form-group">
+                        <label>Режим игры</label>
+                        <div class="toggle-group">
+                            <button class="mc-btn mc-btn-toggle active" data-mode="survival">Выживание</button>
+                            <button class="mc-btn mc-btn-toggle" data-mode="creative">Творчество</button>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="world-seed-input">Ключ генерации (сид, опционально)</label>
+                        <input type="text" id="world-seed-input" class="mc-input" placeholder="Оставьте пустым для случайного">
+                    </div>
+                </div>
+
+                <div class="screen-footer-actions">
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-confirm-create-world">
+                            <span class="mc-btn-text">Создать мир</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half btn-back" data-target="screen-singleplayer">
+                            <span class="mc-btn-text">Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 4. MULTIPLAYER SCREEN (Сетевая игра) -->
+            <div id="screen-multiplayer" class="screen-view hidden">
+                <h2 class="mc-screen-title">Сетевая игра</h2>
+                
+                <div class="form-panel">
+                    <p class="panel-hint">Подключение к серверам через WebSocket (WSS):</p>
+                    <div class="server-list">
+                        <div class="server-card active">
+                            <div class="server-info">
+                                <span class="server-name">Horizon Public Relay</span>
+                                <span class="server-address">wss://relay.playhorizon.dev</span>
+                            </div>
+                            <span class="server-ping">24 ms</span>
+                        </div>
+                    </div>
+
+                    <div class="form-group" style="margin-top: 15px;">
+                        <label for="direct-connect-input">Прямой адрес сервера (WebSocket):</label>
+                        <input type="text" id="direct-connect-input" class="mc-input" placeholder="wss://your-server.com:25565">
+                    </div>
+                </div>
+
+                <div class="screen-footer-actions">
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-connect-server">
+                            <span class="mc-btn-text">Подключиться</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half btn-back" data-target="screen-title">
+                            <span class="mc-btn-text">Назад</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. OPTIONS SCREEN (Настройки) -->
+            <div id="screen-options" class="screen-view hidden">
+                <h2 class="mc-screen-title">Настройки</h2>
+
+                <div class="options-grid">
+                    <div class="option-item">
+                        <label>Дальность прорисовки: <span id="val-render-dist">12 чанков</span></label>
+                        <input type="range" id="opt-render-dist" min="4" max="32" value="12" class="mc-range">
+                    </div>
+
+                    <div class="option-item">
+                        <label>Поле зрения (FOV): <span id="val-fov">70° (Normal)</span></label>
+                        <input type="range" id="opt-fov" min="50" max="110" value="70" class="mc-range">
+                    </div>
+
+                    <div class="option-item">
+                        <label>Макс. частота кадров: <span id="val-fps">60 FPS</span></label>
+                        <input type="range" id="opt-fps" min="30" max="144" step="30" value="60" class="mc-range">
+                    </div>
+
+                    <div class="option-item">
+                        <label>Общая громкость: <span id="val-volume">100%</span></label>
+                        <input type="range" id="opt-volume" min="0" max="100" value="100" class="mc-range">
+                    </div>
+
+                    <div class="option-item">
+                        <label>Сенсорные кнопки: <span id="val-touch">Авто</span></label>
+                        <button class="mc-btn mc-btn-full" id="btn-toggle-touch-mode">
+                            <span class="mc-btn-text">Авто (только на смартфонах)</span>
+                        </button>
+                    </div>
+
+                    <div class="option-item">
+                        <label>Полноэкранный режим</label>
+                        <button class="mc-btn mc-btn-full" id="btn-toggle-fullscreen">
+                            <span class="mc-btn-text">Переключить Fullscreen</span>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="screen-footer-actions">
+                    <button class="mc-btn mc-btn-large btn-back" data-target="screen-title">
+                        <span class="mc-btn-text">Готово</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 6. RESOURCE PACKS SCREEN (Пакеты ресурсов) -->
+            <div id="screen-resources" class="screen-view hidden">
+                <h2 class="mc-screen-title">Ресурсы и пакеты текстур</h2>
+
+                <div class="form-panel">
+                    <div class="resource-card">
+                        <div class="resource-icon">📦</div>
+                        <div class="resource-details">
+                            <span class="resource-name">Horizon Core Assets 26.3 (horizon.zip)</span>
+                            <span class="resource-desc" id="res-desc">Размер: 44.5 МБ • 23 214 ассетов (блоки, предметы, звуки, модели)</span>
+                            <span class="resource-state" id="res-state">Проверка...</span>
+                        </div>
+                    </div>
+
+                    <div class="resource-buttons-group">
+                        <button class="mc-btn mc-btn-full" id="btn-redownload-resources">
+                            <span class="mc-btn-text">🔄 Скачать / обновить ресурсы (horizon.zip)</span>
+                        </button>
+                        
+                        <label class="mc-btn mc-btn-full file-picker-label">
+                            <span class="mc-btn-text">📁 Выбрать horizon.zip с диска (офлайн)</span>
+                            <input type="file" id="input-zip-file" accept=".zip" style="display: none;">
+                        </label>
+                    </div>
+                </div>
+
+                <div class="screen-footer-actions">
+                    <button class="mc-btn mc-btn-large btn-back" data-target="screen-title">
+                        <span class="mc-btn-text">Готово</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 7. IN-GAME PAUSE MENU (ESC) -->
+            <div id="screen-pause" class="screen-view hidden">
+                <h2 class="mc-screen-title">Игра на паузе</h2>
+
+                <div class="menu-buttons-column">
+                    <button class="mc-btn mc-btn-large" id="btn-resume-game">
+                        <span class="mc-btn-text">Вернуться к игре</span>
+                    </button>
+                    
+                    <div class="menu-buttons-row">
+                        <button class="mc-btn mc-btn-half" id="btn-pause-options">
+                            <span class="mc-btn-text">Настройки...</span>
+                        </button>
+                        <button class="mc-btn mc-btn-half" id="btn-pause-stats">
+                            <span class="mc-btn-text">Статистика</span>
+                        </button>
+                    </div>
+
+                    <button class="mc-btn mc-btn-large" id="btn-quit-to-title">
+                        <span class="mc-btn-text">Сохранить и выйти в главное меню</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- 8. DOWNLOAD / PROGRESS MODAL -->
+            <div id="modal-download" class="modal-overlay hidden">
+                <div class="mc-modal-box">
+                    <h3 class="modal-title" id="download-modal-title">Загрузка ресурсов</h3>
+                    
+                    <div class="modal-body">
+                        <p id="download-modal-status" class="modal-status-text">Подготовка...</p>
+                        
+                        <div class="mc-progress-track">
+                            <div id="download-progress-bar" class="mc-progress-bar" style="width: 0%;"></div>
+                        </div>
+
+                        <div class="modal-meta-row">
+                            <span id="download-speed-text">0 МБ/с</span>
+                            <span id="download-percent-text">0%</span>
+                        </div>
+                    </div>
+
+                    <div class="modal-footer">
+                        <button class="mc-btn mc-btn-half" id="btn-cancel-download">
+                            <span class="mc-btn-text">Отмена</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
         </div>
 
-        <!-- In-game Controls Overlay for Touch / Mobile -->
+        <!-- In-game Touch Controls Overlay (D-Pad + Action Buttons for Mobile) -->
         <div id="touch-controls" class="touch-controls hidden">
             <!-- Left D-Pad -->
             <div class="dpad-container">
@@ -76,12 +309,13 @@
             </div>
         </div>
 
-        <!-- Floating UI toolbar -->
+        <!-- Top In-Game Floating HUD Toolbar -->
         <div id="ui-toolbar" class="ui-toolbar hidden">
-            <button id="btn-fullscreen" class="tool-btn" title="Полноэкранный режим">⛶</button>
-            <button id="btn-pause" class="tool-btn" title="Меню паузы / ESC">ESC</button>
-            <button id="btn-toggle-touch" class="tool-btn" title="Сенсорное управление">📱</button>
+            <button id="btn-tb-pause" class="tool-btn" title="Меню паузы (ESC)">⏸ Меню</button>
+            <button id="btn-tb-fullscreen" class="tool-btn" title="Полный экран">⛶</button>
+            <button id="btn-tb-touch" class="tool-btn" title="Переключить сенсорное управление">📱</button>
         </div>
+
     </div>
 
     <!-- Scripts -->
