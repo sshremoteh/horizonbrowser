@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no, maximum-scale=1.0">
+    <title>Horizon Browser - Minecraft Java 26.3 in Rust / WebGPU</title>
+    <!-- COOP/COEP Service Worker for SharedArrayBuffer on GitHub Pages -->
+    <script src="coi-serviceworker.js"></script>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <div id="game-container">
+        <!-- Main WebGPU Canvas -->
+        <canvas id="horizon-canvas" tabindex="1"></canvas>
+
+        <!-- Splash / Loader Screen -->
+        <div id="splash-screen" class="splash-overlay">
+            <div class="splash-card">
+                <div class="logo-area">
+                    <h1 class="logo-title">HORIZON</h1>
+                    <span class="logo-badge">BROWSER / WEBGPU</span>
+                    <p class="logo-sub">Minecraft: Java Edition 26.3 • Rust Re-implementation</p>
+                </div>
+
+                <div id="status-panel" class="status-panel">
+                    <div class="status-header">
+                        <span id="status-title" class="status-title">Проверка системы...</span>
+                        <span id="status-speed" class="status-speed"></span>
+                    </div>
+
+                    <div class="progress-bar-container">
+                        <div id="progress-bar-fill" class="progress-bar-fill" style="width: 0%;"></div>
+                    </div>
+
+                    <div class="status-footer">
+                        <span id="status-detail" class="status-detail">Инициализация веб-движка...</span>
+                        <span id="status-percent" class="status-percent">0%</span>
+                    </div>
+                </div>
+
+                <!-- Action Button Area -->
+                <div id="action-area" class="action-area hidden">
+                    <button id="btn-start" class="btn btn-primary">
+                        <span class="btn-icon">▶</span> ЗАПУСТИТЬ ИГРУ
+                    </button>
+                    <button id="btn-redownload" class="btn btn-secondary">
+                        <span class="btn-icon">🔄</span> Перекачать ресурсы
+                    </button>
+                </div>
+
+                <div class="info-footer">
+                    <p>Поддерживает Chrome, Edge, Safari 18+ и Firefox с включенным WebGPU.</p>
+                    <p><a href="https://github.com/sshremoteh/horizonbrowser" target="_blank" rel="noopener">GitHub репозиторий</a> • <a href="https://playhorizon.dev" target="_blank" rel="noopener">playhorizon.dev</a></p>
+                </div>
+            </div>
+        </div>
+
+        <!-- In-game Controls Overlay for Touch / Mobile -->
+        <div id="touch-controls" class="touch-controls hidden">
+            <!-- Left D-Pad -->
+            <div class="dpad-container">
+                <button class="dpad-btn dpad-up" data-key="KeyW">▲</button>
+                <button class="dpad-btn dpad-left" data-key="KeyA">◀</button>
+                <button class="dpad-btn dpad-down" data-key="KeyS">▼</button>
+                <button class="dpad-btn dpad-right" data-key="KeyD">▶</button>
+                <button class="dpad-btn dpad-center" data-key="ShiftLeft">◆</button>
+            </div>
+
+            <!-- Right Action Buttons -->
+            <div class="action-buttons-container">
+                <button class="touch-btn action-jump" data-key="Space">Прыжок</button>
+                <button class="touch-btn action-sneak" data-key="ShiftLeft">Присед</button>
+                <button class="touch-btn action-break" data-mouse="0">Копать</button>
+                <button class="touch-btn action-place" data-mouse="2">Блок</button>
+                <button class="touch-btn action-inv" data-key="KeyE">Инвентарь</button>
+            </div>
+        </div>
+
+        <!-- Floating UI toolbar -->
+        <div id="ui-toolbar" class="ui-toolbar hidden">
+            <button id="btn-fullscreen" class="tool-btn" title="Полноэкранный режим">⛶</button>
+            <button id="btn-pause" class="tool-btn" title="Меню паузы / ESC">ESC</button>
+            <button id="btn-toggle-touch" class="tool-btn" title="Сенсорное управление">📱</button>
+        </div>
+    </div>
+
+    <!-- Scripts -->
+    <script src="vfs.js"></script>
+    <script src="app.js"></script>
+</body>
+</html>
