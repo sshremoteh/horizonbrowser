@@ -498,6 +498,13 @@ html, body {
     gap: 10px;
 }
 
+.hidden {
+    display: none !important;
+    opacity: 0 !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
+}
+
 /* ==========================================================================
    Modals & Progress Tracks
    ========================================================================== */
@@ -508,21 +515,49 @@ html, body {
     left: 0;
     width: 100%;
     height: 100%;
-    background: rgba(0, 0, 0, 0.8);
+    background: rgba(0, 0, 0, 0.82);
     display: flex;
     align-items: center;
     justify-content: center;
     z-index: 200;
+    backdrop-filter: blur(4px);
+    transition: opacity 0.2s ease;
+}
+
+.modal-overlay.hidden {
+    display: none !important;
+    visibility: hidden !important;
+    pointer-events: none !important;
 }
 
 .mc-modal-box {
+    position: relative;
     background: var(--mc-panel-bg);
-    border: 3px solid #555;
-    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.8);
+    border: 3px solid #666;
+    box-shadow: 0 16px 40px rgba(0, 0, 0, 0.9), 0 0 20px rgba(0, 0, 0, 0.8);
     width: 90%;
-    max-width: 480px;
-    padding: 24px;
+    max-width: 490px;
+    padding: 28px 24px 20px;
     text-align: center;
+}
+
+.modal-close-btn {
+    position: absolute;
+    top: 10px;
+    right: 12px;
+    background: transparent;
+    border: none;
+    color: #aaa;
+    font-size: 1.4rem;
+    font-weight: bold;
+    cursor: pointer;
+    line-height: 1;
+    padding: 4px 8px;
+    transition: color 0.15s;
+}
+
+.modal-close-btn:hover {
+    color: #ff5555;
 }
 
 .modal-title {

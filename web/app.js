@@ -119,9 +119,11 @@
             }
         }
 
-        updateResourceBadge(false, "Требуется загрузка ресурсов");
-        // Start initial quick download automatically
-        promptDownloadResources();
+        updateResourceBadge(false, "Требуется загрузка (нажмите)");
+        if (resourceStatusBadge) {
+            resourceStatusBadge.style.cursor = "pointer";
+            resourceStatusBadge.onclick = () => showScreen("resources");
+        }
     }
 
     function updateResourceBadge(isReady, text) {
@@ -197,8 +199,17 @@
         }
     }
 
-    btnCancelDownload.addEventListener("click", () => {
+    function closeModal() {
         modalDownload.classList.add("hidden");
+    }
+
+    const btnCloseModal = document.getElementById("btn-close-modal");
+    if (btnCloseModal) btnCloseModal.addEventListener("click", closeModal);
+    btnCancelDownload.addEventListener("click", closeModal);
+
+    // Clicking outside modal content (on the overlay backdrop) closes it
+    modalDownload.addEventListener("click", (e) => {
+        if (e.target === modalDownload) closeModal();
     });
 
     document.getElementById("btn-redownload-resources").addEventListener("click", async () => {
@@ -422,6 +433,10 @@
     // ESC Key Handler
     window.addEventListener("keydown", (e) => {
         if (e.code === "Escape") {
+            if (!modalDownload.classList.contains("hidden")) {
+                closeModal();
+                return;
+            }
             if (isGameRunning) {
                 if (menuOverlay.classList.contains("hidden")) {
                     pauseGame();
