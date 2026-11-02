@@ -1060,6 +1060,9 @@ impl SkinSlots {
 
 /// A GET over HTTP or HTTPS (textures.minecraft.net serves both; vanilla
 /// uses https): the body of a 2xx answer, 16 MiB at most, after redirects.
+/// Behind `wasm32` there is no std net: skins resolve offline until the
+/// browser build grows a fetch bridge.
+#[cfg(not(target_arch = "wasm32"))]
 fn http_get(url: &str) -> Option<Vec<u8>> {
     use std::io::Read;
     let response = ureq::AgentBuilder::new()
@@ -1076,6 +1079,11 @@ fn http_get(url: &str) -> Option<Vec<u8>> {
         .read_to_end(&mut body)
         .ok()?;
     Some(body)
+}
+
+#[cfg(target_arch = "wasm32")]
+fn http_get(_url: &str) -> Option<Vec<u8>> {
+    None
 }
 
 /// SHA-1 (FIPS 180-4).

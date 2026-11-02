@@ -5,7 +5,7 @@
 
 (function () {
     // DOM Elements
-    const canvas = document.getElementById("horizon-canvas");
+    const canvas = document.getElementById("game-canvas") || document.getElementById("horizon-canvas");
     const menuOverlay = document.getElementById("menu-overlay");
     const uiToolbar = document.getElementById("ui-toolbar");
     const touchControls = document.getElementById("touch-controls");
@@ -148,6 +148,20 @@
             }
         }
 
+        // Try loading local horizon.zip if present alongside index.html
+        try {
+            updateResourceBadge(false, "Поиск ресурсов horizon.zip...");
+            const resp = await fetch("horizon.zip");
+            if (resp.ok) {
+                const buf = await resp.arrayBuffer();
+                await vfs.saveZipToCache(buf);
+                await vfs.mountZipBuffer(buf);
+                updateResourceBadge(true, `Готово (${vfs.totalFiles.toLocaleString()} файлов)`);
+                preloadEngine();
+                return;
+            }
+        } catch (_) {}
+
         updateResourceBadge(false, "Требуется загрузка (нажмите)");
         if (resourceStatusBadge) {
             resourceStatusBadge.style.cursor = "pointer";
@@ -176,18 +190,10 @@
     const ENGINE_BADGE_MISSING = "missing";
 
     function preloadEngine() {
-        if (window.HorizonEngine) {
-            updateEngineBadge(ENGINE_BADGE_READY, "3D Voxel Engine (Готов)");
-            if (!window.horizonEngine) {
-                window.horizonEngine = new HorizonEngine();
-                window.horizonEngine.init(vfs).catch(console.warn);
-            }
-            return Promise.resolve();
-        }
         if (!engineLoader) return Promise.resolve();
         if (engineReadyPromise) return engineReadyPromise;
 
-        updateEngineBadge(ENGINE_BADGE_PENDING, "Поиск WASM-модуля...");
+        updateEngineBadge(ENGINE_BADGE_PENDING, "Загрузка Rust WASM...");
 
         const onProgress = (info) => {
             if (info && info.text) updateEngineBadge(ENGINE_BADGE_PENDING, info.text);
@@ -536,31 +542,58 @@
         } catch (_) {}
 
         try {
-            // Initialize 3D Voxel Engine
-            if (!window.horizonEngine) {
-                window.horizonEngine = new HorizonEngine();
+            // 1. Ensure Rust WebAssembly engine is loaded
+            let engine = engineLoader ? engineLoader.engine : null;
+            if (!engine || (engineLoader && engineLoader.state !== "ready")) {
+                showEngineLoading("Загрузка движка Horizon (Rust WebGPU)...");
+                engine = await engineLoader.load((p) => {
+                    updateEngineProgress(p.percent, p.text);
+                });
             }
-            await window.horizonEngine.init(vfs);
+
+            // 2. Ensure resources are mounted in Rust engine
+            showEngineLoading("Монтирование ресурсов Minecraft...");
+            if (!vfs.rawZipBuffer) {
+                const cached = await vfs.getCachedZip();
+                if (cached) {
+                    vfs.rawZipBuffer = cached;
+                } else {
+                    const resp = await fetch("horizon.zip");
+                    if (resp.ok) {
+                        const buf = await resp.arrayBuffer();
+                        vfs.rawZipBuffer = buf;
+                        await vfs.saveZipToCache(buf);
+                    }
+                }
+            }
+
+            if (vfs.rawZipBuffer && engine && engine.horizon_mount_resources) {
+                console.log("[Horizon] Mounting resources in Rust engine:", vfs.rawZipBuffer.byteLength, "bytes");
+                engine.horizon_mount_resources(new Uint8Array(vfs.rawZipBuffer));
+            }
+
+            // 3. Launch the game!
+            hideEngineLoading();
+            menuOverlay.classList.add("hidden");
+            uiToolbar.classList.remove("hidden");
+            isGameRunning = true;
+
+            if (isTouchDevice) {
+                touchControls.classList.remove("hidden");
+            }
+
+            console.log("[Horizon] Starting genuine Horizon Rust client...");
+            if (engine && engine.horizon_start) {
+                engine.horizon_start();
+            } else if (window.horizonEngine && window.horizonEngine.start) {
+                window.horizonEngine.start();
+                updateHotbarSelection(0);
+            }
         } catch (err) {
-            console.error("[Horizon] Engine init error:", err);
+            console.error("[Horizon] Engine launch error:", err);
             showEngineError(err);
             return;
         }
-
-        // World and textures ready: start the game!
-        hideEngineLoading();
-        menuOverlay.classList.add("hidden");
-        if (inGameHud) inGameHud.classList.remove("hidden");
-        uiToolbar.classList.remove("hidden");
-        isGameRunning = true;
-
-        if (isTouchDevice) {
-            touchControls.classList.remove("hidden");
-        }
-
-        // Start 3D Rendering & Physics Loop
-        window.horizonEngine.start();
-        updateHotbarSelection(0);
 
         // Request Pointer Lock for immersive first-person mouse look
         try {

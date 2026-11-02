@@ -166,6 +166,11 @@ impl ApplicationHandler for Missing {
             return;
         }
         // Wake now and then for Ctrl+C in the console; redraws come with events.
+        #[cfg(target_arch = "wasm32")]
+        event_loop.set_control_flow(ControlFlow::WaitUntil(
+            web_time::Instant::now() + Duration::from_millis(250),
+        ));
+        #[cfg(not(target_arch = "wasm32"))]
         event_loop.set_control_flow(ControlFlow::WaitUntil(
             Instant::now() + Duration::from_millis(250),
         ));

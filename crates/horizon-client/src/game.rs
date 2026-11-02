@@ -505,6 +505,14 @@ impl Options {
     /// The command line, then what it asks of the process: the game folder, the account.
     /// A bad command line is a [`launch_api::UsageError`] (exit code 2, no crash report).
     fn read() -> Result<Option<Self>> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let o = Self::parse(std::iter::empty())?
+                .ok_or_else(|| launch_api::UsageError("failed to create default options".into()))?;
+            return Ok(Some(o));
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let Some(mut o) = Self::parse(std::env::args().skip(1))
             .map_err(|e| launch_api::UsageError(e.to_string()))?
         else {
@@ -559,10 +567,14 @@ impl Options {
             }
         }
         Ok(Some(o))
+        }
     }
     /// The command line alone: no file is read and nothing changes. `None` for `--help` and
     /// `--launch-api`, which print and end the run.
     fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<Self>> {
+        #[cfg(target_arch = "wasm32")]
+        let sibling = std::path::PathBuf::from("resources");
+        #[cfg(not(target_arch = "wasm32"))]
         let sibling = std::env::current_exe()?
             .parent()
             .ok_or("missing executable directory")?
@@ -2127,7 +2139,7 @@ struct Game<'a> {
     /// When `resourcepacks/` was last looked at for the open pack screen, and what it held
     /// (`watch_pack_folder`).
     pack_folder: Option<(
-        std::time::Instant,
+        Instant,
         Vec<(String, u64, Option<std::time::SystemTime>)>,
     )>,
     /// A pack reload staged on a worker (`LoadingOverlay`): the frame draws
@@ -2199,7 +2211,7 @@ struct Game<'a> {
     /// The wheel and hovered slot of `BundleMouseActions`.
     bundle_mouse: bundles::BundleMouse,
     /// The last inventory click, for the double click that gathers a stack.
-    last_inv_click: Option<(std::time::Instant, usize, bool)>,
+    last_inv_click: Option<(Instant, usize, bool)>,
     /// `lastQuickMoved`: what the last Shift click moved, which a Shift
     /// double click moves every stack of.
     last_quick_moved: Option<ItemStack>,
@@ -2365,7 +2377,7 @@ struct Game<'a> {
     /// An open book, book and quill or lectern screen.
     book: Option<books::BookScreen>,
     /// The last click on the book screen, for double clicks.
-    book_last_click: Option<std::time::Instant>,
+    book_last_click: Option<Instant>,
     /// Lecterns whose page-turn pulse is running (ticks left).
     lectern_pulses: Vec<((i32, i32, i32), i32)>,
     /// LevelLoadingScreen.smoothedProgress while the player is not placed yet.
@@ -2374,7 +2386,7 @@ struct Game<'a> {
     /// while the title says `createWorld.preparing`.
     creation_job: Option<std::thread::JoinHandle<std::result::Result<(), String>>>,
     /// When `loading_progress` last eased (the server thread's load, 50 ms a step).
-    loading_progress_at: Option<std::time::Instant>,
+    loading_progress_at: Option<Instant>,
     /// The world spawn search's origin chunk and fallback height, once known.
     spawn_origin: Option<((i32, i32), i32)>,
     spawn_spiral: horizon_client::world_spawn::ChunkSpiral,
@@ -2738,7 +2750,7 @@ struct Game<'a> {
     /// The game tests read so far, by id (the test instance registry).
     test_defs: std::cell::RefCell<HashMap<String, Option<test_instances::TestDef>>>,
     /// `GameTestBlockHighlightRenderer.markers`: block, text, removal time.
-    test_highlights: HashMap<(i32, i32, i32), (String, std::time::Instant)>,
+    test_highlights: HashMap<(i32, i32, i32), (String, Instant)>,
     /// `GameTestTicker.SINGLETON`: the game tests running on this server.
     game_tests: game_tests::GameTests,
     /// KeyboardHandler's debug key state (game/debug_keys.rs), the physical
@@ -9786,7 +9798,7 @@ impl Game<'_> {
             && shift
             && slot != 200
         {
-            let now = std::time::Instant::now();
+            let now = Instant::now();
             let double = self.last_inv_click.is_some_and(|(at, last, was_right)| {
                 last == slot && was_right == right && now.duration_since(at).as_millis() < 250
             });
@@ -9830,7 +9842,7 @@ impl Game<'_> {
         {
             // An item tab's display slots take no drags or PICKUP_ALL.
             let display = slot >= Creative::DISPLAY;
-            let now = std::time::Instant::now();
+            let now = Instant::now();
             let double = !shift
                 && !right
                 && !display
@@ -16169,6 +16181,16 @@ impl ApplicationHandler for Game<'_> {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
+        #[cfg(target_arch = "wasm32")]
+        let attributes = {
+            use winit::platform::web::WindowAttributesExtWebSys;
+            let window = web_sys::window().expect("no global `window` exists");
+            let document = window.document().expect("should have a document on window");
+            let canvas = document
+                .get_element_by_id("game-canvas")
+                .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+            attributes.with_canvas(canvas)
+        };
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -17673,6 +17695,11 @@ impl Game<'_> {
                         window.request_redraw();
                     }
                     // Yield between polls even when disk I/O is slow.
+                    #[cfg(target_arch = "wasm32")]
+                    event_loop.set_control_flow(ControlFlow::WaitUntil(
+                        web_time::Instant::now() + Duration::from_millis(4),
+                    ));
+                    #[cfg(not(target_arch = "wasm32"))]
                     event_loop.set_control_flow(ControlFlow::WaitUntil(
                         Instant::now() + Duration::from_millis(4),
                     ));
@@ -19755,6 +19782,16 @@ impl Loading {
         let attributes = Window::default_attributes()
             .with_title("Horizon")
             .with_window_icon(horizon_client::window::icon());
+        #[cfg(target_arch = "wasm32")]
+        let attributes = {
+            use winit::platform::web::WindowAttributesExtWebSys;
+            let window = web_sys::window().expect("no global `window` exists");
+            let document = window.document().expect("should have a document on window");
+            let canvas = document
+                .get_element_by_id("game-canvas")
+                .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+            attributes.with_canvas(canvas)
+        };
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
         #[cfg(target_os = "linux")]
         let attributes = winit::platform::wayland::WindowAttributesExtWayland::with_name(
@@ -20129,12 +20166,21 @@ fn run_loading(
         receiver,
         loaded: None,
         delivered: false,
-        handle: Some(loader),
+        handle: loader,
         shown: false,
         menu,
         error: None,
     };
     let mut app = App::Loading(Box::new(loading));
+    #[cfg(target_arch = "wasm32")]
+    {
+        use winit::platform::web::EventLoopExtWebSys;
+        let event_loop = EventLoop::new()?;
+        event_loop.spawn_app(app);
+        return Ok(());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let result = EventLoop::new()?.run_app(&mut app);
     narrator::stop();
     match &mut app {
@@ -20158,6 +20204,7 @@ fn run_loading(
         }
     }
     Ok(())
+    }
 }
 
 pub use launch_api::{UsageError, exit_code};
@@ -20191,7 +20238,11 @@ pub fn run() -> Result<()> {
     let started = Instant::now();
     horizon_client::spans::enable(options.spikes.is_some());
     let vanilla_root = options.resources.clone();
-    if let Some(error) = missing_resources(&vanilla_root) {
+    #[cfg(target_arch = "wasm32")]
+    let missing: Option<String> = None;
+    #[cfg(not(target_arch = "wasm32"))]
+    let missing = missing_resources(&vanilla_root);
+    if let Some(error) = missing {
         // The game build started by hand (the release's zip), not by the
         // launcher: a window says where to get it. Scripts and servers get
         // the error.
@@ -20230,6 +20281,9 @@ pub fn run() -> Result<()> {
     }
     // Snapshots of derived tables live in the game folder, never beside the
     // shared resources.
+    #[cfg(target_arch = "wasm32")]
+    Behaviours::set_cache_dir(std::path::PathBuf::from(".horizon-cache"));
+    #[cfg(not(target_arch = "wasm32"))]
     Behaviours::set_cache_dir(std::env::current_dir()?.join(".horizon-cache"));
     if !synchronous_startup(&options) {
         return run_loading(options, early_settings, vanilla_root, None, started);

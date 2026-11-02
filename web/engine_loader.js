@@ -101,7 +101,26 @@ class HorizonEngineLoader {
         }
 
         this.state = "loading";
-        onProgress({ stage: "search", text: "Поиск WASM-модуля движка...", percent: 10 });
+        onProgress({ stage: "search", text: "Загрузка движка Horizon (Rust WebGPU)...", percent: 15 });
+
+        // 1. Primary: load the genuine Horizon Rust WebAssembly build from ./pkg/
+        try {
+            onProgress({ stage: "download", text: "Загрузка WebAssembly модуля Horizon...", percent: 30 });
+            const horizonWasm = await import("./pkg/horizon_client.js");
+            onProgress({ stage: "compile", text: "Компиляция и линковка с WebGPU...", percent: 70 });
+            await horizonWasm.default("./pkg/horizon_client_bg.wasm");
+            onProgress({ stage: "init", text: "Инициализация подсистем ядра Rust...", percent: 90 });
+            horizonWasm.horizon_init();
+
+            this.engine = horizonWasm;
+            this.state = "ready";
+            window.horizon_engine = horizonWasm;
+            onProgress({ stage: "ready", text: "Движок Horizon (Rust / WebGPU) готов!", percent: 100 });
+            console.log("[HorizonEngine] Genuine Rust WASM engine loaded successfully from ./pkg/!");
+            return horizonWasm;
+        } catch (err) {
+            console.warn("[HorizonEngine] Primary pkg/ load failed, trying fallback:", err);
+        }
 
         // Locate the engine: in-VFS first (instant, local), then HTTP mirrors.
         // Mirrors are probed in parallel with hard timeouts so one dead CDN

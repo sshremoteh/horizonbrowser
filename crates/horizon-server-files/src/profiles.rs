@@ -43,6 +43,13 @@ pub fn resolve(name: &str, online: bool) -> Option<NameAndId> {
 /// `name` (any case), or None when there is none or the services don't
 /// answer (vanilla logs both as "Couldn't find profile with name").
 pub fn find_by_name(discovery: &str, name: &str) -> Option<NameAndId> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (discovery, name);
+        return None;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
         .user_agent(&format!("Horizon/{}", horizon_core::release::VERSION))
@@ -50,11 +57,19 @@ pub fn find_by_name(discovery: &str, name: &str) -> Option<NameAndId> {
     let doc = json::parse(&agent.get(discovery).call().ok()?.into_string().ok()?, true).ok()?;
     let url = endpoint(&doc, "profiles", "getByName")?.replace("{name}", &name.to_lowercase());
     found(&agent.get(&url).call().ok()?.into_string().ok()?, name)
+    }
 }
 
 /// YggdrasilMinecraftSessionService.fetchProfile(id, true), as the management protocol finds a player given by
 /// id that the user cache doesn't know: the `session` / `getProfileById` endpoint, or None.
 pub fn find_by_id(discovery: &str, id: u128) -> Option<NameAndId> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (discovery, id);
+        return None;
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
         .user_agent(&format!("Horizon/{}", horizon_core::release::VERSION))
@@ -71,6 +86,7 @@ pub fn find_by_id(discovery: &str, id: u128) -> Option<NameAndId> {
         .ok()?;
     let name = json::parse(&answer, true).ok()?.get("name")?.as_string()?;
     found(&answer, &name).filter(|user| user.id == id)
+    }
 }
 
 /// MinecraftServicesKeyInfo.get: the services' public keys from the
@@ -80,6 +96,13 @@ pub fn find_by_id(discovery: &str, id: u128) -> Option<NameAndId> {
 /// line vanilla logs, after which it has no keys.
 pub fn fetch_profile_key_keys(discovery: &str) -> Result<Vec<RsaPublicKey>, &'static str> {
     const FAILED: &str = "Failed to request Minecraft Services public key";
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = discovery;
+        return Err(FAILED);
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let agent = ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
         .user_agent(&format!("Horizon/{}", horizon_core::release::VERSION))
@@ -90,6 +113,7 @@ pub fn fetch_profile_key_keys(discovery: &str) -> Result<Vec<RsaPublicKey>, &'st
         .ok_or(FAILED)?;
     let url = endpoint(&doc, "authentication", "getPublicKeys").ok_or(FAILED)?;
     profile_key_keys(&get(&url).ok_or(FAILED)?)
+    }
 }
 
 /// The key set answer: `{"profilePropertyKeys": [...], "playerCertificateKeys":

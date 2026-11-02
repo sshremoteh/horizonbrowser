@@ -210,6 +210,13 @@ impl FrameGen {
         window: &Arc<winit::window::Window>,
         config: &wgpu::SurfaceConfiguration,
     ) -> Option<(wgpu::Texture, wgpu::Texture)> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (device, queue, surface, offscreen, window, config);
+            None
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let Some(surface) = surface else {
             let real = offscreen.cloned().unwrap_or_else(|| frame(device, config));
             if self
@@ -239,6 +246,7 @@ impl FrameGen {
             self.paused = true;
         }
         pair
+        }
     }
 
     /// The world's target at the screen's size this frame, where `Post::finish` draws.
@@ -351,6 +359,12 @@ impl FrameGen {
     /// Hand this frame's pair to the present thread, after the frame's submission: the
     /// made frame (when `made`) goes first.
     pub fn present(&mut self, real: wgpu::Texture, generated: wgpu::Texture, made: bool) {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = (real, generated, made);
+        }
+        #[cfg(not(target_arch = "wasm32"))]
+        {
         let now = Instant::now();
         if let Some(last) = self.last {
             // A real frame's time, smoothed: the made frame shows for half of it.
@@ -390,6 +404,7 @@ impl FrameGen {
             }
         };
         let _ = send.send(pair);
+        }
     }
 }
 
@@ -414,8 +429,19 @@ fn frame(device: &wgpu::Device, config: &wgpu::SurfaceConfiguration) -> wgpu::Te
     })
 }
 
+#[cfg(target_arch = "wasm32")]
+struct Presenter {
+    config: wgpu::SurfaceConfiguration,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Presenter {
+    fn failed(&self) -> bool { true }
+}
+
 /// One real frame's frames for the present thread: `first` (the made frame) now,
 /// `second` (the real one) half an `interval` later; `spare` goes straight back.
+#[cfg(not(target_arch = "wasm32"))]
 struct Pair {
     first: Option<wgpu::Texture>,
     second: wgpu::Texture,
@@ -424,6 +450,7 @@ struct Pair {
 }
 
 /// The thread that copies frames to the swapchain and presents them on time.
+#[cfg(not(target_arch = "wasm32"))]
 struct Presenter {
     config: wgpu::SurfaceConfiguration,
     send: Option<mpsc::SyncSender<Pair>>,
@@ -433,6 +460,7 @@ struct Presenter {
     thread: Option<thread::JoinHandle<()>>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Presenter {
     fn start(
         device: &wgpu::Device,
@@ -519,6 +547,7 @@ impl Presenter {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Drop for Presenter {
     fn drop(&mut self) {
         self.send = None;

@@ -124,6 +124,7 @@ class HorizonVFS {
     }
 
     async mountZipBuffer(arrayBuffer, onProgress) {
+        this.rawZipBuffer = arrayBuffer;
         await this.loadJSZip();
         if (onProgress) onProgress({ status: "indexing", text: "Индексация структуры архива..." });
 

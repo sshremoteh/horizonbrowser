@@ -15,6 +15,9 @@ use std::sync::{Mutex, mpsc};
 /// macOS's Metal it stalled: offscreen at render distance 12, a tenth to a half of the frame rate
 /// with 20-180 ms p99 frames, against the same binary without it. Windows is not measured yet.
 pub fn wanted() -> bool {
+    #[cfg(target_arch = "wasm32")]
+    return false;
+    #[cfg(not(target_arch = "wasm32"))]
     match std::env::var("HORIZON_SUBMIT_THREAD").as_deref() {
         Ok("0") => false,
         Ok("1") => true,
@@ -23,7 +26,10 @@ pub fn wanted() -> bool {
 }
 
 /// Work to start right after a frame's submission (a readback's `map_async`).
+#[cfg(not(target_arch = "wasm32"))]
 pub type AfterSubmit = Box<dyn FnOnce() + Send>;
+#[cfg(target_arch = "wasm32")]
+pub type AfterSubmit = Box<dyn FnOnce()>;
 
 /// A frame for the submit thread: its commands and, in a window, the surface to present.
 pub struct Job {
@@ -61,38 +67,43 @@ impl Queue {
             pending: AtomicBool::new(false),
             landing: Mutex::new(None),
         };
+        #[cfg(target_arch = "wasm32")]
+        let threaded = false;
         if !threaded {
             return this;
         }
-        let (jobs, job_rx) = mpsc::channel::<Job>();
-        let (done_tx, done) = mpsc::channel();
-        let queue = this.queue.clone();
-        let spawned = std::thread::Builder::new()
-            .name("Render submit".into())
-            .spawn(move || {
-                for job in job_rx {
-                    let commands = job.encoder.finish();
-                    let submission = queue.submit([commands]);
-                    if let Some(after) = job.after {
-                        after();
+        #[cfg(not(target_arch = "wasm32"))]
+        {
+            let (jobs, job_rx) = mpsc::channel::<Job>();
+            let (done_tx, done) = mpsc::channel();
+            let queue = this.queue.clone();
+            let spawned = std::thread::Builder::new()
+                .name("Render submit".into())
+                .spawn(move || {
+                    for job in job_rx {
+                        let commands = job.encoder.finish();
+                        let submission = queue.submit([commands]);
+                        if let Some(after) = job.after {
+                            after();
+                        }
+                        if let Some(surface) = job.surface {
+                            queue.present(surface);
+                        }
+                        if done_tx.send(submission).is_err() {
+                            break;
+                        }
                     }
-                    if let Some(surface) = job.surface {
-                        queue.present(surface);
-                    }
-                    if done_tx.send(submission).is_err() {
-                        break;
-                    }
-                }
-            });
-        match spawned {
-            Ok(handle) => {
-                this.thread = Some(Thread {
-                    jobs: Some(jobs),
-                    handle: Some(handle),
                 });
-                *this.lock() = Some(Landing { done, landed: None });
+            match spawned {
+                Ok(handle) => {
+                    this.thread = Some(Thread {
+                        jobs: Some(jobs),
+                        handle: Some(handle),
+                    });
+                    *this.lock() = Some(Landing { done, landed: None });
+                }
+                Err(e) => log::warn!("Horizon renderer: no submit thread ({e}); submitting in place"),
             }
-            Err(e) => log::warn!("Horizon renderer: no submit thread ({e}); submitting in place"),
         }
         this
     }

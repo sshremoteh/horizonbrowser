@@ -171,11 +171,59 @@ pub fn discovery_url() -> String {
         .unwrap_or_else(|| DEFAULT_DISCOVERY.to_owned())
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(15))
         .user_agent(&format!("Horizon/{}", horizon_core::release::VERSION))
         .build()
+}
+
+/// One synchronous HTTPS call: the body of a 2xx reply, the status and its
+/// body otherwise, or `Unavailable` without a networking layer (behind
+/// `wasm32`, where std net does not exist; a fetch bridge replaces it when
+/// the browser build reaches services again).
+#[derive(Debug)]
+enum HttpReply {
+    Body(String),
+    Status(u16, String),
+    Unavailable,
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn http(method: &str, url: &str, headers: &[(&str, &str)], body: Option<&str>) -> HttpReply {
+    use std::io::Read;
+    let mut request = agent().request(method, url);
+    for (name, value) in headers {
+        request = request.set(name, value);
+    }
+    let result = match body {
+        Some(body) => request.send_string(body),
+        None => request.call(),
+    };
+    match result {
+        Ok(response) => HttpReply::Body(
+            response
+                .into_reader()
+                .take(16 << 20)
+                .read_to_string()
+                .unwrap_or_default(),
+        ),
+        Err(ureq::Error::Status(status, response)) => HttpReply::Status(
+            status,
+            response
+                .into_reader()
+                .take(1 << 20)
+                .read_to_string()
+                .unwrap_or_default(),
+        ),
+        Err(ureq::Error::Transport(_)) => HttpReply::Unavailable,
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn http(_method: &str, _url: &str, _headers: &[(&str, &str)], _body: Option<&str>) -> HttpReply {
+    HttpReply::Unavailable
 }
 
 /// The discovery document, fetched once per game (a failure is retried next time).
@@ -184,13 +232,11 @@ pub(crate) fn discovery() -> Result<Arc<serde_json::Value>, JoinError> {
     if let Some(d) = CACHE.lock().unwrap().clone() {
         return Ok(d);
     }
-    let doc: serde_json::Value = agent()
-        .get(&discovery_url())
-        .call()
-        .ok()
-        .and_then(|r| r.into_string().ok())
-        .and_then(|t| serde_json::from_str(&t).ok())
-        .ok_or(JoinError::Unavailable)?;
+    let doc: serde_json::Value = match http("GET", &discovery_url(), &[], None) {
+        HttpReply::Body(text) => serde_json::from_str(&text).ok(),
+        _ => None,
+    }
+    .ok_or(JoinError::Unavailable)?;
     let doc = Arc::new(doc);
     *CACHE.lock().unwrap() = Some(doc.clone());
     Ok(doc)
@@ -208,6 +254,7 @@ pub fn endpoint(doc: &serde_json::Value, service: &str, name: &str) -> Option<St
 /// `SessionService.fetchProfile(uuid, true)` (`getProfileById`). A failed
 /// attributes call falls back to the offline properties, a failed profile call
 /// to no actions, as vanilla does. Blocks: call it off the main thread.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn fetch_account_status(session: &AuthSession) -> crate::ban_notice::AccountStatus {
     use crate::ban_notice::{AccountStatus, parse_profile_actions, parse_properties};
     let Ok(doc) = discovery() else {
@@ -243,6 +290,11 @@ pub fn fetch_account_status(session: &AuthSession) -> crate::ban_notice::Account
     }
 }
 
+#[cfg(target_arch = "wasm32")]
+pub fn fetch_account_status(_session: &AuthSession) -> crate::ban_notice::AccountStatus {
+    crate::ban_notice::AccountStatus::default()
+}
+
 /// The JoinMinecraftServerRequest body; `selectedProfile` is the undashed UUID.
 pub fn join_request(session: &AuthSession, server_hash: &str) -> String {
     serde_json::json!({
@@ -258,17 +310,16 @@ pub fn join_request(session: &AuthSession, server_hash: &str) -> String {
 pub fn join_server(session: &AuthSession, server_hash: &str) -> Result<(), JoinError> {
     let doc = discovery()?;
     let url = endpoint(&doc, "session", "join").ok_or(JoinError::Unavailable)?;
-    match agent()
-        .post(&url)
-        .set("Content-Type", "application/json; charset=utf-8")
-        .send_string(&join_request(session, server_hash))
-    {
-        Ok(_) => Ok(()),
-        Err(ureq::Error::Status(status, response)) => Err(JoinError::from_response(
-            status,
-            &response.into_string().unwrap_or_default(),
-        )),
-        Err(ureq::Error::Transport(_)) => Err(JoinError::Unavailable),
+    let body = join_request(session, server_hash);
+    match http(
+        "POST",
+        &url,
+        &[("Content-Type", "application/json; charset=utf-8")],
+        Some(&body),
+    ) {
+        HttpReply::Body(_) => Ok(()),
+        HttpReply::Status(status, response) => Err(JoinError::from_response(status, &response)),
+        HttpReply::Unavailable => Err(JoinError::Unavailable),
     }
 }
 
@@ -372,20 +423,20 @@ pub fn parse_certificates(body: &str) -> Option<ChatKeyPair> {
 pub fn fetch_chat_keys(session: &AuthSession) -> Result<ChatKeyPair, JoinError> {
     let doc = discovery()?;
     let url = endpoint(&doc, "player", "getCertificates").ok_or(JoinError::Unavailable)?;
-    let body = match agent()
-        .post(&url)
-        .set("Authorization", &format!("Bearer {}", session.access_token))
-        .set("Content-Type", "application/json; charset=utf-8")
-        .send_string("")
-    {
-        Ok(response) => response.into_string().unwrap_or_default(),
-        Err(ureq::Error::Status(status, response)) => {
-            return Err(JoinError::from_response(
-                status,
-                &response.into_string().unwrap_or_default(),
-            ));
+    let body = match http(
+        "POST",
+        &url,
+        &[
+            ("Authorization", &format!("Bearer {}", session.access_token)),
+            ("Content-Type", "application/json; charset=utf-8"),
+        ],
+        Some(""),
+    ) {
+        HttpReply::Body(body) => body,
+        HttpReply::Status(status, response) => {
+            return Err(JoinError::from_response(status, &response));
         }
-        Err(ureq::Error::Transport(_)) => return Err(JoinError::Unavailable),
+        HttpReply::Unavailable => return Err(JoinError::Unavailable),
     };
     parse_certificates(&body)
         .ok_or_else(|| JoinError::Other("Malformed profile key pair response".to_owned()))
@@ -463,6 +514,7 @@ const MINECRAFT_PROFILE: &str = "https://api.minecraftservices.com/minecraft/pro
 /// The signed-in account's active skin and cape from `GET /minecraft/profile`.
 /// Single-player and integrated servers often send no `textures` property, or
 /// one without the equipped cape; the client asks the profile endpoint once.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn own_textures(session: &AuthSession) -> Option<crate::skins::Textures> {
     let response = agent()
         .get(MINECRAFT_PROFILE)
@@ -475,6 +527,11 @@ pub fn own_textures(session: &AuthSession) -> Option<crate::skins::Textures> {
     let body = response.into_string().ok()?;
     let profile: serde_json::Value = serde_json::from_str(&body).ok()?;
     Some(crate::skins::services_profile_textures(&profile))
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn own_textures(_session: &AuthSession) -> Option<crate::skins::Textures> {
+    None
 }
 
 /// What the session service says about a player joining this server
@@ -520,17 +577,16 @@ pub fn has_joined(
         query.push_str(&format!("&ip={}", url_encode(&ip.to_string())));
     }
     let separator = if url.contains('?') { '&' } else { '?' };
-    let body = match agent().get(&format!("{url}{separator}{query}")).call() {
-        Ok(response) => response.into_string().unwrap_or_default(),
-        Err(ureq::Error::Status(status, response)) => {
-            let error =
-                JoinError::from_response(status, &response.into_string().unwrap_or_default());
+    let body = match http("GET", &format!("{url}{separator}{query}"), &[], None) {
+        HttpReply::Body(body) => body,
+        HttpReply::Status(status, response) => {
+            let error = JoinError::from_response(status, &response);
             return match error {
                 JoinError::Unavailable => Err(error),
                 _ => Ok(None),
             };
         }
-        Err(ureq::Error::Transport(_)) => return Err(JoinError::Unavailable),
+        HttpReply::Unavailable => return Err(JoinError::Unavailable),
     };
     Ok(parse_joined(&body))
 }

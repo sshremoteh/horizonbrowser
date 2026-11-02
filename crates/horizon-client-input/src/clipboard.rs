@@ -123,6 +123,7 @@ pub trait Clipboard {
 /// data-control protocol and falls back to X11 (XWayland) on compositors
 /// without it. When no system clipboard can be reached, text copied in the
 /// game can still be pasted in the game.
+#[cfg(not(target_arch = "wasm32"))]
 #[derive(Default)]
 pub struct SystemClipboard {
     system: Option<arboard::Clipboard>,
@@ -130,6 +131,7 @@ pub struct SystemClipboard {
     copied: Option<String>,
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl SystemClipboard {
     /// The text last copied by the game.
     pub fn copied(&self) -> Option<&str> {
@@ -143,6 +145,7 @@ impl SystemClipboard {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 impl Clipboard for SystemClipboard {
     fn get(&mut self) -> String {
         let Some(system) = self.system() else {
@@ -168,6 +171,34 @@ impl Clipboard for SystemClipboard {
         {
             self.system = None;
         }
+    }
+}
+
+/// Browser clipboard: there is no synchronous system clipboard behind
+/// `wasm32` (arboard has no Web target), so copied text stays in the game
+/// until a Web paste bridge replaces `Clipboard::get`.
+#[cfg(target_arch = "wasm32")]
+#[derive(Default)]
+pub struct SystemClipboard {
+    /// The text Horizon last copied.
+    copied: Option<String>,
+}
+
+#[cfg(target_arch = "wasm32")]
+impl SystemClipboard {
+    /// The text last copied by the game.
+    pub fn copied(&self) -> Option<&str> {
+        self.copied.as_deref()
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+impl Clipboard for SystemClipboard {
+    fn get(&mut self) -> String {
+        self.copied.clone().unwrap_or_default()
+    }
+    fn set(&mut self, text: &str) {
+        self.copied = (!text.is_empty()).then(|| text.to_owned());
     }
 }
 

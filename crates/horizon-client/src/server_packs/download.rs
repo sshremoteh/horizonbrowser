@@ -211,6 +211,13 @@ fn download_file_within(
     progress: &Sender<Progress>,
     timeout: std::time::Duration,
 ) -> Result<PathBuf, String> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = (dir, request, headers, max_size, progress, timeout);
+        return Err("Download not supported on wasm32".into());
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let target = request.sha1.as_ref().map(|sha1| dir.join(sha1));
     if let (Some(target), Some(sha1)) = (&target, &request.sha1) {
         if matches(target, sha1) {
@@ -284,6 +291,7 @@ fn download_file_within(
             let _ = fs::remove_file(&tmp);
             result.map_err(|e| e.to_string())
         }
+    }
     }
 }
 fn rand_suffix() -> u64 {

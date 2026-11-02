@@ -102,7 +102,7 @@ pub struct Count {
 }
 
 /// Sends `ping` to `endpoint` (`https://host`, without a trailing slash).
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", not(target_arch = "wasm32")))]
 pub fn send(endpoint: &str, ping: &Ping) -> Result<(), String> {
     agent()
         .post(&format!("{endpoint}/v1/live"))
@@ -112,8 +112,13 @@ pub fn send(endpoint: &str, ping: &Ping) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+#[cfg(all(feature = "live", target_arch = "wasm32"))]
+pub fn send(_endpoint: &str, _ping: &Ping) -> Result<(), String> {
+    Ok(())
+}
+
 /// The live count at `endpoint`.
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", not(target_arch = "wasm32")))]
 pub fn fetch(endpoint: &str) -> Result<Count, String> {
     let body = agent()
         .get(&format!("{endpoint}/v1/live"))
@@ -124,11 +129,17 @@ pub fn fetch(endpoint: &str) -> Result<Count, String> {
     serde_json::from_str(&body).map_err(|e| e.to_string())
 }
 
-#[cfg(feature = "live")]
+#[cfg(all(feature = "live", not(target_arch = "wasm32")))]
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new()
         .timeout(Duration::from_secs(5))
         .build()
+}
+
+/// Browser build: no std net, the live count stays empty.
+#[cfg(all(feature = "live", target_arch = "wasm32"))]
+pub fn fetch(_endpoint: &str) -> Result<Count, String> {
+    Err("wasm: нет сетевого слоя".to_owned())
 }
 
 #[cfg(test)]

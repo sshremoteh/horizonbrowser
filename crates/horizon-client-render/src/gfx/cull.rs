@@ -587,7 +587,28 @@ impl Cull {
 
     /// The frame's results to read back, started by calling it right after the frame's
     /// submission (on the submit thread, when the frame goes there).
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn submitted(&mut self) -> Option<impl FnOnce() + Send + 'static> {
+        let i = self.current.take()?;
+        let r = &self.readbacks[i];
+        let state = r.state.clone();
+        state.store(PENDING, Ordering::Release);
+        let (buffer, bytes) = (r.buffer.clone(), r.slots.len() as u64 * 4);
+        self.next = (i + 1) % READBACKS;
+        Some(move || {
+            buffer
+                .slice(..bytes)
+                .map_async(wgpu::MapMode::Read, move |result| {
+                    state.store(
+                        if result.is_ok() { MAPPED } else { FREE },
+                        Ordering::Release,
+                    );
+                });
+        })
+    }
+
+    #[cfg(target_arch = "wasm32")]
+    pub fn submitted(&mut self) -> Option<impl FnOnce() + 'static> {
         let i = self.current.take()?;
         let r = &self.readbacks[i];
         let state = r.state.clone();

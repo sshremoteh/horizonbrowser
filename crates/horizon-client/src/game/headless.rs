@@ -38,6 +38,12 @@ impl HeadlessLoop {
     /// When the step that started at `started` wants the next one: at the time the game asked
     /// for (`WaitUntil`, as the closing save's polls do), else one frame later.
     fn next_step(&self, started: Instant) -> Instant {
+        #[cfg(target_arch = "wasm32")]
+        {
+            let _ = started;
+            started
+        }
+        #[cfg(not(target_arch = "wasm32"))]
         match self.flow.get() {
             ControlFlow::WaitUntil(at) => at,
             ControlFlow::Poll | ControlFlow::Wait => started + FRAME,

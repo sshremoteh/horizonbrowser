@@ -54,8 +54,40 @@ fn save(home: &Path, state: &State) {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn agent() -> ureq::Agent {
     ureq::AgentBuilder::new().timeout(TIMEOUT).build()
+}
+
+/// One HTTP delivery of a batch body to `url`. Behind `wasm32` there is no
+/// std net: uploads report a failure and stay in the outbox until a fetch
+/// bridge lands.
+enum DeliverOutcome {
+    Delivered,
+    /// Refused for what it is (not for load): sending it again would not help.
+    Refused(u16),
+    Failed(String),
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+fn deliver(url: &str, body: &[u8]) -> DeliverOutcome {
+    match agent()
+        .post(url)
+        .set("Content-Type", "application/json")
+        .set("Content-Encoding", "zstd")
+        .send_bytes(body)
+    {
+        Ok(_) => DeliverOutcome::Delivered,
+        Err(ureq::Error::Status(code, _)) if (400..500).contains(&code) && code != 429 => {
+            DeliverOutcome::Refused(code)
+        }
+        Err(e) => DeliverOutcome::Failed(e.to_string()),
+    }
+}
+
+#[cfg(target_arch = "wasm32")]
+fn deliver(_url: &str, _body: &[u8]) -> DeliverOutcome {
+    DeliverOutcome::Failed("wasm: нет сетевого слоя".to_owned())
 }
 
 /// Sends what the player allows to `endpoint` (`https://host`, without a trailing slash).
@@ -75,7 +107,6 @@ pub fn flush(home: &Path, endpoint: &str) -> Flush {
     if crate::now_secs() < state.retry_at || state.batches >= MAX_BATCHES_A_DAY {
         return Flush::Later;
     }
-    let agent = agent();
     let url = format!("{endpoint}/v1/batch");
     let (mut items, mut batches) = (0, 0);
     for group in batch::split(allowed) {
@@ -84,13 +115,8 @@ pub fn flush(home: &Path, endpoint: &str) -> Flush {
         }
         let (paths, list): (Vec<PathBuf>, Vec<crate::Item>) = group.into_iter().unzip();
         let body = batch::encode(&Batch::new(&consent.install_id, list));
-        let sent = agent
-            .post(&url)
-            .set("Content-Type", "application/json")
-            .set("Content-Encoding", "zstd")
-            .send_bytes(&body);
-        match sent {
-            Ok(_) => {
+        match deliver(&url, &body) {
+            DeliverOutcome::Delivered => {
                 state.batches += 1;
                 state.failures = 0;
                 items += paths.len();
@@ -98,15 +124,15 @@ pub fn flush(home: &Path, endpoint: &str) -> Flush {
                 paths.iter().for_each(|p| drop(std::fs::remove_file(p)));
             }
             // Refused for what it is (not for load): sending it again would not help.
-            Err(ureq::Error::Status(code, _)) if (400..500).contains(&code) && code != 429 => {
+            DeliverOutcome::Refused(_) => {
                 state.batches += 1;
                 paths.iter().for_each(|p| drop(std::fs::remove_file(p)));
             }
-            Err(e) => {
+            DeliverOutcome::Failed(e) => {
                 state.failures = (state.failures + 1).min(16);
                 state.retry_at = crate::now_secs() + (60u64 << (state.failures - 1)).min(86_400);
                 save(home, &state);
-                return Flush::Failed(e.to_string());
+                return Flush::Failed(e);
             }
         }
     }
@@ -119,6 +145,7 @@ pub fn flush(home: &Path, endpoint: &str) -> Flush {
 }
 
 /// Asks the server to delete everything sent under `install_id`.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn delete_remote(endpoint: &str, install_id: &str) -> Result<(), String> {
     if !crate::consent::is_install_id(install_id) {
         return Err("no install ID: nothing was sent".into());
@@ -128,6 +155,11 @@ pub fn delete_remote(endpoint: &str, install_id: &str) -> Result<(), String> {
         .call()
         .map(|_| ())
         .map_err(|e| e.to_string())
+}
+
+#[cfg(target_arch = "wasm32")]
+pub fn delete_remote(_endpoint: &str, _install_id: &str) -> Result<(), String> {
+    Ok(())
 }
 
 /// The batch the next [`flush`] would send, as readable JSON ("View what would be sent").

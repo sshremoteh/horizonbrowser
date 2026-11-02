@@ -13,14 +13,22 @@ serde_json = "1"
 ruzstd = "0.9"
 # The random install ID and outbox file names.
 getrandom = "0.3"
-# Sending, for the launcher (and the game's "I'm playing" ping); the ingest server builds without it.
-ureq = { version = "2", default-features = false, features = ["tls"], optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+# Random for the wasm target: `wasm_js` entropy from the host side.
+getrandom = { version = "0.3", default-features = false, features = ["wasm_js"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+# Sending, for the launcher (and the game's "I'm playing" ping). std net has
+# no wasm target; the browser build keeps the outbox local until a fetch
+# bridge replaces `upload::deliver` and `live::fetch`.
+ureq = { version = "2", default-features = false, features = ["tls"] }
 
 [features]
 default = ["upload", "live"]
-upload = ["dep:ureq"]
+upload = []
 # The "I'm playing" ping and reading the live count (`live`), for the game and the launcher.
-live = ["dep:ureq"]
+live = []
 
 [[test]]
 name = "consent_gating"

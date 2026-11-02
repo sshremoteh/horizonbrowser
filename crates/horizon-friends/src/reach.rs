@@ -67,6 +67,13 @@ fn virtual_interface(name: &str) -> bool {
 /// LAN), shared IPv4 (Tailscale's 100.64/10, CGNAT), other IPv4, one global
 /// IPv6. No link-local or unique-local; loopback on request.
 pub fn interface_addresses(loopback: bool) -> Vec<IpAddr> {
+    #[cfg(target_arch = "wasm32")]
+    {
+        let _ = loopback;
+        return Vec::new();
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
     let mut found: Vec<(u8, IpAddr)> = Vec::new();
     for i in if_addrs::get_if_addrs().unwrap_or_default() {
         if virtual_interface(&i.name) {
@@ -111,6 +118,7 @@ pub fn interface_addresses(loopback: bool) -> Vec<IpAddr> {
         }
     }
     out
+    }
 }
 
 impl Reach {

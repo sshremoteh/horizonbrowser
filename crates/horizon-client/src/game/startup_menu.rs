@@ -327,13 +327,56 @@ fn panic_text(payload: &(dyn std::any::Any + Send)) -> &str {
 
 /// Each generation has its own channel and progress. Pack changes wait for the
 /// old tail before starting another generation, including cache/global writes.
+#[cfg(target_arch = "wasm32")]
 pub(super) fn spawn_loader(
     options: &Options,
     settings: &Settings,
     vanilla_root: &std::path::Path,
     started: Instant,
     progress: &Progress,
-) -> Result<(Receiver<LoaderMsg>, JoinHandle<()>)> {
+) -> Result<(Receiver<LoaderMsg>, Option<JoinHandle<()>>)> {
+    let (sender, receiver) = std::sync::mpsc::channel();
+    let settings = settings.clone();
+    let vanilla_root = vanilla_root.to_path_buf();
+    let dev_mods = options.dev_mods.clone();
+    let world = launch_world(options).map(str::to_owned);
+    let mut pack_error = None;
+    let root = packs::startup_root(&vanilla_root, &settings.resource_packs, &[])
+        .unwrap_or_else(|error| {
+            pack_error = Some(error.to_string());
+            vanilla_root.clone()
+        });
+    let root = mods::content_root(&root, &settings.mods.enabled, &dev_mods);
+    let result = load_resources(
+        root,
+        world.as_deref(),
+        &vanilla_root,
+        &settings,
+        started,
+        true,
+        false,
+        progress,
+        &mut |gui, root| {
+            let _ = sender.send(LoaderMsg::Ui(gui, root.to_path_buf()));
+        },
+    )
+    .map(|mut loaded| {
+        loaded.pack_error = loaded.pack_error.or(pack_error);
+        loaded
+    })
+    .map_err(|error| error.to_string());
+    let _ = sender.send(LoaderMsg::Done(result));
+    Ok((receiver, None))
+}
+
+#[cfg(not(target_arch = "wasm32"))]
+pub(super) fn spawn_loader(
+    options: &Options,
+    settings: &Settings,
+    vanilla_root: &std::path::Path,
+    started: Instant,
+    progress: &Progress,
+) -> Result<(Receiver<LoaderMsg>, Option<JoinHandle<()>>)> {
     let (sender, receiver) = std::sync::mpsc::channel();
     let settings = settings.clone();
     let vanilla_root = vanilla_root.to_path_buf();
@@ -370,7 +413,7 @@ pub(super) fn spawn_loader(
             .map_err(|error| error.to_string());
             let _ = sender.send(LoaderMsg::Done(result));
         })?;
-    Ok((receiver, handle))
+    Ok((receiver, Some(handle)))
 }
 
 impl Loading {
@@ -1202,7 +1245,7 @@ impl Loading {
             &self.progress,
         )?;
         self.receiver = receiver;
-        self.handle = Some(handle);
+        self.handle = handle;
         self.menu.reload_packs = false;
         Ok(())
     }

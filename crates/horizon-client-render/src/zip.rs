@@ -17,6 +17,7 @@ const MAX_ENTRY: usize = 1 << 30;
 
 /// One archive with its entries indexed by name (`\` read as `/`), files
 /// and folders apart.
+#[derive(Clone)]
 pub struct Zip {
     archive: ZipArchive<Reader>,
     entries: BTreeMap<String, usize>,
@@ -35,6 +36,8 @@ fn read_at(file: &fs::File, out: &mut [u8], at: u64) -> io::Result<usize> {
     return std::os::unix::fs::FileExt::read_at(file, out, at);
     #[cfg(windows)]
     return std::os::windows::fs::FileExt::seek_read(file, out, at);
+    #[cfg(not(any(unix, windows)))]
+    { let _ = (file, out, at); Err(io::Error::new(io::ErrorKind::Unsupported, "wasm")) }
 }
 /// The bytes of `file` from `start` to `end`.
 fn read_range(file: &fs::File, start: u64, end: u64) -> io::Result<Vec<u8>> {
@@ -91,10 +94,28 @@ impl Seek for Reader {
         Ok(self.position)
     }
 }
+static MOUNTED_ZIP: std::sync::RwLock<Option<Zip>> = std::sync::RwLock::new(None);
+
+pub fn mount_zip(data: Vec<u8>) -> io::Result<()> {
+    let zip = Zip::from_bytes(data)?;
+    *MOUNTED_ZIP.write().map_err(|e| io::Error::new(io::ErrorKind::Other, e.to_string()))? = Some(zip);
+    Ok(())
+}
+
+pub fn get_mounted_zip() -> Option<Zip> {
+    MOUNTED_ZIP.read().ok()?.as_ref().cloned()
+}
+
 impl Zip {
     /// Reads the central directory, not the entries: opening a pack of many
     /// gigabytes for its `pack.mcmeta` costs what opening a small one does.
     pub fn open(path: &Path) -> io::Result<Self> {
+        #[cfg(target_arch = "wasm32")]
+        {
+            if let Some(zip) = get_mounted_zip() {
+                return Ok(zip);
+            }
+        }
         let file = fs::File::open(path)?;
         let len = file.metadata()?.len();
         let mut tail_at = len.saturating_sub((END_HEADER + u16::MAX as usize) as u64);
@@ -655,3 +676,5 @@ mod tests {
         }
     }
 }
+
+
