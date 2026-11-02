@@ -5,6 +5,8 @@ struct Params {
     stamp: u32,
     // Boxes covering more than this share of the screen count as seen.
     big: f32,
+    pad0: u32,
+    pad1: u32,
 }
 // The leading member of terrain.wgsl's Globals.
 struct Globals {

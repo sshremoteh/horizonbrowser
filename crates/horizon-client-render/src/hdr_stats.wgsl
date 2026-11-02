@@ -19,6 +19,8 @@ struct Params {
     // threshold lies, for bright parts and for all over (hdr.rs `Masks`).
     parts: f32,
     whole: f32,
+    pad0: f32,
+    pad1: f32,
 };
 @group(0) @binding(8) var<uniform> params: Params;
 

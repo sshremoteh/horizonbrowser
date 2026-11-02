@@ -481,6 +481,11 @@
         engineLoadingStatus.textContent = "Подготовка...";
     }
 
+    function updateEngineProgress(percent, text) {
+        if (engineLoadingBar) engineLoadingBar.style.width = percent + "%";
+        if (engineLoadingStatus && text) engineLoadingStatus.textContent = text;
+    }
+
     function showEngineError(err) {
         engineErrorContent.classList.remove("hidden");
         engineLoadingBar.parentElement.classList.add("hidden");
@@ -537,7 +542,7 @@
             const AudioContext = window.AudioContext || window.webkitAudioContext;
             if (AudioContext) {
                 const ctx = new AudioContext();
-                if (ctx.state === "suspended") await ctx.resume();
+                if (ctx.state === "suspended") ctx.resume().catch(() => {});
             }
         } catch (_) {}
 
@@ -546,9 +551,13 @@
             let engine = engineLoader ? engineLoader.engine : null;
             if (!engine || (engineLoader && engineLoader.state !== "ready")) {
                 showEngineLoading("Загрузка движка Horizon (Rust WebGPU)...");
-                engine = await engineLoader.load((p) => {
-                    updateEngineProgress(p.percent, p.text);
-                });
+                if (engineReadyPromise) {
+                    engine = await engineReadyPromise;
+                } else {
+                    engine = await engineLoader.load((p) => {
+                        updateEngineProgress(p.percent, p.text);
+                    });
+                }
             }
 
             // 2. Ensure resources are mounted in Rust engine

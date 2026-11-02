@@ -43,6 +43,7 @@ pub struct Gpu {
 
 /// When the game started, for the time to the title screen. Call first thing in `main`.
 pub fn mark_start() {
+    #[cfg(not(target_arch = "wasm32"))]
     STARTED.get_or_init(Instant::now);
 }
 

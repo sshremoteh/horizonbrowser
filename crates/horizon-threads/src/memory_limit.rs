@@ -38,7 +38,14 @@ static SHRINKS_UNTIL: AtomicU64 = AtomicU64::new(0);
 static LAST_FRAME: AtomicU64 = AtomicU64::new(0);
 
 fn since_start() -> u64 {
-    STARTED.get_or_init(Instant::now).elapsed().as_millis() as u64
+    #[cfg(target_arch = "wasm32")]
+    {
+        0
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    {
+        STARTED.get_or_init(Instant::now).elapsed().as_millis() as u64
+    }
 }
 
 /// The game drew a frame.

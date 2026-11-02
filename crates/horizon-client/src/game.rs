@@ -16189,6 +16189,10 @@ impl ApplicationHandler for Game<'_> {
             let canvas = document
                 .get_element_by_id("game-canvas")
                 .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+            if let Some(c) = &canvas {
+                c.set_width(size[0] as u32);
+                c.set_height(size[1] as u32);
+            }
             attributes.with_canvas(canvas)
         };
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
@@ -17737,6 +17741,39 @@ impl Game<'_> {
             return;
         }
         if let Some(w) = &self.window {
+            #[cfg(target_arch = "wasm32")]
+            {
+                if let Some(renderer) = &mut self.renderer {
+                    if let Some(win) = web_sys::window() {
+                        let dpr = win.device_pixel_ratio();
+                        let doc = win.document();
+                        let canvas = doc.as_ref().and_then(|d| d.get_element_by_id("game-canvas"))
+                            .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+                        let (target_w, target_h) = if let Some(c) = canvas {
+                            let cw = c.client_width() as f64;
+                            let ch = c.client_height() as f64;
+                            if cw > 1.0 && ch > 1.0 {
+                                ((cw * dpr) as u32, (ch * dpr) as u32)
+                            } else {
+                                let iw = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
+                                let ih = win.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(720.0);
+                                ((iw * dpr) as u32, (ih * dpr) as u32)
+                            }
+                        } else {
+                            (1280, 720)
+                        };
+                        let target_w = target_w.max(640);
+                        let target_h = target_h.max(360);
+                        if renderer.config.width != target_w || renderer.config.height != target_h {
+                            log::info!("Horizon renderer (Game): resizing to {}x{}", target_w, target_h);
+                            renderer.resize(target_w, target_h);
+                        }
+                    }
+                }
+                let id = w.id();
+                self.handle_window_event(event_loop, id, WindowEvent::RedrawRequested);
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             if self.options.offscreen {
                 // Offscreen frames don't wait for the window to be drawn: an
                 // occluded window (a locked macOS session) gets no redraws.
@@ -18979,6 +19016,9 @@ fn load_resources(
     // bundle's core tables from the same root (`load_core`). A pack failure
     // in either starts both again with the game's own resources
     // (Minecraft.rollbackResourcePacks).
+    #[cfg(target_arch = "wasm32")]
+    let parallel = false;
+    #[cfg(not(target_arch = "wasm32"))]
     let parallel = threads > 1;
     let mut offer = |ui: UiResources, root: &std::path::Path| {
         if menu {
@@ -19790,6 +19830,10 @@ impl Loading {
             let canvas = document
                 .get_element_by_id("game-canvas")
                 .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+            if let Some(c) = &canvas {
+                c.set_width(size[0] as u32);
+                c.set_height(size[1] as u32);
+            }
             attributes.with_canvas(canvas)
         };
         // Wayland names the window by its app id, which the horizon.desktop entry matches.
@@ -19925,6 +19969,38 @@ impl Loading {
             return;
         }
         if let Some(w) = &self.window {
+            #[cfg(target_arch = "wasm32")]
+            {
+                if let Some(renderer) = &mut self.renderer {
+                    if let Some(win) = web_sys::window() {
+                        let dpr = win.device_pixel_ratio();
+                        let doc = win.document();
+                        let canvas = doc.as_ref().and_then(|d| d.get_element_by_id("game-canvas"))
+                            .and_then(|e| wasm_bindgen::JsCast::dyn_into::<web_sys::HtmlCanvasElement>(e).ok());
+                        let (target_w, target_h) = if let Some(c) = canvas {
+                            let cw = c.client_width() as f64;
+                            let ch = c.client_height() as f64;
+                            if cw > 1.0 && ch > 1.0 {
+                                ((cw * dpr) as u32, (ch * dpr) as u32)
+                            } else {
+                                let iw = win.inner_width().ok().and_then(|v| v.as_f64()).unwrap_or(1280.0);
+                                let ih = win.inner_height().ok().and_then(|v| v.as_f64()).unwrap_or(720.0);
+                                ((iw * dpr) as u32, (ih * dpr) as u32)
+                            }
+                        } else {
+                            (1280, 720)
+                        };
+                        let target_w = target_w.max(640);
+                        let target_h = target_h.max(360);
+                        if renderer.config.width != target_w || renderer.config.height != target_h {
+                            log::info!("Horizon renderer: resizing to {}x{}", target_w, target_h);
+                            renderer.resize(target_w, target_h);
+                        }
+                    }
+                }
+                self.draw();
+            }
+            #[cfg(not(target_arch = "wasm32"))]
             if self.options.as_ref().is_some_and(|o| o.offscreen) {
                 self.draw();
             } else {

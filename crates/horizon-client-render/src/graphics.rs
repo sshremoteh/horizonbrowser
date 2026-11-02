@@ -830,6 +830,8 @@ impl Graphics {
     }
     /// Worker threads for chunk generation and meshing.
     pub fn worker_threads(&self) -> usize {
+        #[cfg(target_arch = "wasm32")]
+        return 1;
         if self.workers > 0 {
             return self.workers as usize;
         }

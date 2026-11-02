@@ -1765,7 +1765,14 @@ impl Renderer {
         }
         let info = adapter.get_info();
         crate::graphics::suggest_reduced_far_detail(crate::graphics::lod_capped(&info));
-        let size = window.inner_size();
+        let size = {
+            let s = window.inner_size();
+            if s.width <= 1 || s.height <= 1 {
+                winit::dpi::PhysicalSize::new(1280, 720)
+            } else {
+                s
+            }
+        };
         let max_side = device.limits().max_texture_dimension_2d;
         let (config, present_modes, hdr_output) = if let Some(surface) = &surface {
             let mut config = surface

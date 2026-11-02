@@ -638,13 +638,16 @@ pub fn report_error(
 
 /// Called every frame: panics once `HORIZON_DEBUG_CRASH` asks (development builds only).
 pub fn debug_crash_tick() {
-    static AT: std::sync::OnceLock<Option<(std::time::Instant, std::time::Duration)>> =
-        std::sync::OnceLock::new();
-    if let Some((first, after)) =
-        AT.get_or_init(|| debug_crash_after().map(|d| (std::time::Instant::now(), d)))
-        && first.elapsed() >= *after
+    #[cfg(not(target_arch = "wasm32"))]
     {
-        panic!("Manually triggered debug crash");
+        static AT: std::sync::OnceLock<Option<(std::time::Instant, std::time::Duration)>> =
+            std::sync::OnceLock::new();
+        if let Some((first, after)) =
+            AT.get_or_init(|| debug_crash_after().map(|d| (std::time::Instant::now(), d)))
+            && first.elapsed() >= *after
+        {
+            panic!("Manually triggered debug crash");
+        }
     }
 }
 

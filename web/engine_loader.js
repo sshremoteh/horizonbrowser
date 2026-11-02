@@ -75,7 +75,18 @@ class HorizonEngineLoader {
      */
     async load(onProgress = () => {}) {
         if (this.state === "ready" && this.engine) return this.engine;
+        if (this.state === "loading" && this._loadPromise) return this._loadPromise;
         if (this.state === "loading") throw new Error("Загрузка движка уже идёт.");
+
+        this._loadPromise = this._loadInternal(onProgress);
+        try {
+            return await this._loadPromise;
+        } finally {
+            this._loadPromise = null;
+        }
+    }
+
+    async _loadInternal(onProgress = () => {}) {
 
         // 1. Hard feature checks — fail loudly instead of a black canvas
         if (!window.WebAssembly) {
